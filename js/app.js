@@ -3,7 +3,7 @@
   'use strict';
 
   // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
-  var APP_VERSION = '2026-11-25.4';
+  var APP_VERSION = '2026-11-25.5';
 
   var S = window.BTStats;
   var DB = window.BTStore;
@@ -11,9 +11,10 @@
   var TYPES = ['absorcion', 'ruptura'];
   var TYPE_LABEL = { absorcion: 'Absorción', ruptura: 'Ruptura' };
   var TYPE_SHORT = TYPE_LABEL;
-  // ¿Se formó FVG? (sí / no / sin dato). Aplica a los dos tipos de entrada.
+  // ¿El impulso dejó FVG? (sí / no / sin dato): el movimiento después de romper o absorber el borde del rango.
+  // Aplica a los dos tipos de entrada. Es independiente de si se entró en un FVG (eso es el punto de entrada).
   var FVGF_OPTS = [['si', 'Sí', true], ['no', 'No', false]];
-  function fvgfLabel(v) { return v === true ? 'FVG formado' : (v === false ? 'Sin FVG' : ''); }
+  function fvgfLabel(v) { return v === true ? 'Impulso con FVG' : (v === false ? 'Impulso sin FVG' : ''); }
   var RR_OPTS = [1, 1.5, 2];
   var MFE_OPTS = [
     { v: 0, label: 'Menos de 1:1', short: '<1' },
@@ -166,7 +167,7 @@
               (on ? '✓ ' : '') + o[1] + '</button>';
           }).join('') +
         '</div>' +
-        '<p class="lbl">¿Se formó FVG? <span class="hint">· opcional, tocá de nuevo para quitar</span></p>' +
+        '<p class="lbl">¿El impulso dejó FVG? <span class="hint">· después de romper o absorber el borde · opcional</span></p>' +
         '<div class="chips ctx">' +
           FVGF_OPTS.map(function (o) {
             var on = d.fvgFormed === o[2];
@@ -320,7 +321,7 @@
       'Si los ± del win rate se superponen mucho, la diferencia todavía puede ser casualidad.</p></section>';
   }
 
-  // Expectativa de cada objetivo (1, 1.5, 2) por punto de entrada y por "¿se formó FVG?".
+  // Expectativa de cada objetivo (1, 1.5, 2) por punto de entrada y por "¿el impulso dejó FVG?".
   function contextSection(trades) {
     var g = S.groupByTags(trades, 'entry');
     var html = tpTable('Take profit ideal por punto de entrada', g, ENTRY_OPTS, 'sin punto de entrada marcado',
@@ -328,8 +329,8 @@
       'Si un trade tiene varios puntos marcados, cuenta en cada uno. ');
     var withF = trades.filter(function (t) { return t.fvgFormed === true || t.fvgFormed === false; });
     var gf = { groups: S.groupBy(withF, function (t) { return t.fvgFormed; }), withData: withF.length, missing: trades.length - withF.length };
-    html += tpTable('Take profit ideal: ¿se formó FVG?', gf, [['true', 'Sí'], ['false', 'No']], 'sin marcar',
-      'Todavía no marcaste "¿Se formó FVG?" en ningún trade.', '');
+    html += tpTable('Take profit ideal: ¿el impulso dejó FVG?', gf, [['true', 'Sí'], ['false', 'No']], 'sin marcar',
+      'Todavía no marcaste "¿El impulso dejó FVG?" en ningún trade.', '');
     return html;
   }
 
@@ -432,7 +433,7 @@
         (d.mfe === null ? '<p class="need">Elegí hasta dónde llegó</p>' : '')) +
       row('Entrada', chips('entry', ENTRY_OPTS.map(function (o) { return [o[0], o[1] === 'Borde del rango' ? 'Borde' : o[1]]; }),
         function (v) { return d.entry.indexOf(v) !== -1; })) +
-      row('¿Se formó FVG?', chips('fvgFormed', FVGF_OPTS, function (v) { return fvgfValue(v) === d.fvgFormed; })) +
+      row('¿Impulso con FVG?', chips('fvgFormed', FVGF_OPTS, function (v) { return fvgfValue(v) === d.fvgFormed; })) +
       '<textarea id="enote" class="input area mini" maxlength="500" rows="2" placeholder="Descripción (opcional)">' + esc(d.note) + '</textarea>' +
       '<div class="row erow-btns">' +
         '<button class="btn ghost" data-action="hcancel">Cancelar</button>' +
@@ -476,7 +477,7 @@
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
-    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'fvg_formado', 'descripcion']];
+    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'impulso_con_fvg', 'descripcion']];
     S.sortTrades(DB.all()).forEach(function (t) {
       rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, (t.entry || []).join('+'),
         t.fvgFormed === true ? 'si' : (t.fvgFormed === false ? 'no' : ''), t.note || '']);

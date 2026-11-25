@@ -5,7 +5,7 @@ App móvil (PWA) para que Mati registre a mano un backtesting de su estrategia *
 
 - **Absorción**: una vela de M5 cierra dentro del rango tras una ruptura fallida; entra por orden stop, con el SL en la última mecha/estructura que absorbió. Objetivo 1:1.
 - **Ruptura**: espera la ruptura y entra con orden límite en un FVG, con el SL en una zona de estructura de M1. Objetivo 1:1.
-- **¿Se formó FVG?** (`fvgFormed`): sí/no, aplica a los dos tipos. (Mati descartó un tercer tipo "ruptura con imbalance": quiere este dato también en absorción.)
+- **¿El impulso dejó FVG?** (`fvgFormed`): sí/no — si el movimiento *después* de romper o absorber el borde del rango dejó un FVG. Aplica a los dos tipos y es independiente del punto de entrada. (Mati descartó un tercer tipo "ruptura con imbalance": quiere este dato también en absorción.)
 
 La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1, 1.5:1, 2:1) y qué tipo de entrada rinde mejor?** Quiere distinguir los setups de 1.5 de los de 1.1, así que más adelante conviene sumar campos de contexto para filtrar (ver ideas).
 
@@ -26,7 +26,7 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
   note: string,            // descripción libre, hasta 500 caracteres
   createdAt: number,
   entry: Array<'fvg' | 'ob' | 'borde'>,     // punto de entrada, multiselección (puede quedar vacía), sin repetidos y en ese orden
-  fvgFormed: true | false | null }         // ¿se formó FVG? (opcional)
+  fvgFormed: true | false | null }         // ¿el impulso (post ruptura/absorción del borde) dejó FVG? (opcional)
 ```
 - Guardado en `orb-bt:v4`. Al abrir, si no existe, se migra desde `orb-bt:v3`, `v2` o `v1` (las viejas quedan intactas como respaldo). v2 guardaba `entry` como valor único o null; v3 lo pasa a lista; v4 suma `fvgFormed` (clave nueva para que una versión vieja de la app no lea ni pise esos datos). `normalize()` en `js/store.js` lleva cualquier trade al formato actual; Importar acepta todas las versiones.
 - **Regla**: agregar un valor nuevo a un campo validado (tipo, R:R, MFE, punto de entrada) también es cambio de formato → subir la clave.
