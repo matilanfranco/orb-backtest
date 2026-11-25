@@ -223,6 +223,8 @@
       card('Racha ganadora', s.maxWinStreak, 'máxima') +
     '</section>';
 
+    if (ui.filter === 'all') html += typeCompare(trades);
+
     html += '<section class="card"><h3>Win rate vs. lo que necesitás</h3>' +
       '<p>Tu win rate: <b>' + fmtPct(s.winRate, 1) + '</b> · mínimo para no perder con tus R:R: <b>' + fmtPct(s.breakEvenWR, 1) + '</b> ' +
       '<span class="' + (s.winRate > s.breakEvenWR ? 'pos' : 'neg') + '">(' +
@@ -249,11 +251,6 @@
         return '<div class="bar"><span class="bl">' + o.label + '</span><span class="bt"><i style="width:' + (100 * c / maxCount).toFixed(0) + '%"></i></span><span class="bn">' + c + '</span></div>';
       }).join('') + '</section>';
 
-    if (ui.filter === 'all') {
-      var byType = S.groupBy(trades, function (t) { return t.type; });
-      html += '<section class="card"><h3>Por tipo de entrada</h3>' + groupTable(byType, function (k) { return TYPE_LABEL[k]; }, ['absorcion', 'ruptura']) + '</section>';
-    }
-
     html += contextSection(trades);
 
     var byRR = S.groupBy(trades, function (t) { return t.rr; });
@@ -263,6 +260,45 @@
     html += '<section class="card"><h3>Por día de la semana</h3>' + groupTable(byDay, function (k) { return DAYS[k]; }, ['1', '2', '3', '4', '5', '0', '6'], true) + '</section>';
 
     return html;
+  }
+
+  // Absorción vs. ruptura, lado a lado. Resalta el mejor de cada fila.
+  function typeCompare(trades) {
+    var g = S.groupBy(trades, function (t) { return t.type; });
+    var a = g.absorcion, r = g.ruptura;
+    var NA = '<span class="hint">—</span>';
+    // [etiqueta, valor a mostrar, número para comparar, más alto es mejor?, color]
+    var metrics = [
+      ['Trades', function (x) { return x.summary.n + ' <small>(' + x.summary.wins + ' TP · ' + x.summary.losses + ' SL)</small>'; }],
+      ['Win rate', function (x) { return fmtPct(x.summary.winRate, 1) + ' <small>± ' + fmtPct(x.summary.margin, 0) + '</small>'; },
+        function (x) { return x.summary.winRate; }, true],
+      ['Win rate mínimo', function (x) { return fmtPct(x.summary.breakEvenWR, 1); }],
+      ['R neto', function (x) { return fmtR(x.summary.netR); }, function (x) { return x.summary.netR; }, true, function (x) { return cls(x.summary.netR); }],
+      ['Expectativa', function (x) { return fmtR(x.summary.expectancy); }, function (x) { return x.summary.expectancy; }, true, function (x) { return cls(x.summary.expectancy); }],
+      ['Profit factor', function (x) { return fmtPF(x.summary.profitFactor); }, function (x) { return x.summary.profitFactor; }, true,
+        function (x) { return x.summary.profitFactor >= 1 ? 'pos' : 'neg'; }],
+      ['Máx. drawdown', function (x) { return '−' + x.summary.maxDD.toFixed(2) + 'R'; }, function (x) { return x.summary.maxDD; }, false],
+      ['Racha perdedora', function (x) { return x.summary.maxLossStreak; }, function (x) { return x.summary.maxLossStreak; }, false],
+      ['TP ideal', function (x) { return bestLabel(x.ideal); }]
+    ];
+    var rows = metrics.map(function (m) {
+      var better = null;
+      if (m[2] && a && r) {
+        var va = m[2](a), vr = m[2](r);
+        if (va !== vr) better = (va > vr) === m[3] ? 'a' : 'r';
+      }
+      function cell(x, side) {
+        if (!x) return '<td>' + NA + '</td>';
+        var c = (m[4] ? m[4](x) : '') + (better === side ? ' better' : '');
+        return '<td class="' + c + '">' + m[1](x) + '</td>';
+      }
+      return '<tr><th scope="row">' + m[0] + '</th>' + cell(a, 'a') + cell(r, 'r') + '</tr>';
+    });
+    return '<section class="card"><h3>Absorción vs. Ruptura</h3>' +
+      '<table class="tbl cmp"><thead><tr><th></th><th class="abs">Absorción</th><th class="brk">Ruptura</th></tr></thead>' +
+      '<tbody>' + rows.join('') + '</tbody></table>' +
+      '<p class="hint">Resaltado = mejor de los dos. "Win rate mínimo" es el que necesitás para no perder con los R:R que usaste. ' +
+      'Si los ± del win rate se superponen mucho, la diferencia todavía puede ser casualidad.</p></section>';
   }
 
   // Expectativa de cada objetivo (1, 1.5, 2) segmentada por cada campo de contexto.

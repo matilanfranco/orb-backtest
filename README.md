@@ -18,12 +18,13 @@ Sin dependencias ni build: HTML + CSS + JS puro.
 Filtrables por tipo de entrada (todas / absorción / ruptura):
 
 - Trades, win rate (con margen de error 95%), R neto, expectativa por trade, profit factor, drawdown máximo, rachas.
+- **Absorción vs. Ruptura** lado a lado (en "Todas"): trades, win rate con margen de error, win rate mínimo, R neto, expectativa, profit factor, drawdown, racha perdedora y TP ideal, con el mejor de cada fila resaltado.
 - Win rate real vs. el mínimo que necesitás según tus R:R.
 - Curva de capital en R.
 - **Take profit ideal**: para 1:1, 1.5:1 y 2:1, qué porcentaje de tus trades llegó al objetivo y qué expectativa daría cada uno.
 - Distribución del máximo movimiento.
 - **Take profit ideal por punto de entrada**: para FVG, OB y borde del rango, la expectativa con 1:1, 1.5:1 y 2:1. Los grupos con menos de 10 trades se ven atenuados.
-- Desglose por tipo de entrada, por R:R elegido y por día de la semana.
+- Desglose por R:R elegido y por día de la semana.
 
 **Supuesto del take profit ideal:** un trade "gana" con objetivo T si su máximo movimiento llegó a T; si no llegó, se asume pérdida de 1R. Con menos de ~30 trades la app avisa que la muestra es chica.
 

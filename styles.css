@@ -141,3 +141,9 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .tbl tr.low td { opacity: .5; }
 .item .sub.ctx { margin-top: 2px; font-size: 12px; }
 .input.area { min-height: 84px; resize: vertical; line-height: 1.4; }
+
+/* absorción vs. ruptura */
+.tbl.cmp th[scope=row] { color: var(--muted); font-weight: 500; font-size: 13px; padding: 8px 4px; border-top: 1px solid var(--line); text-align: left; }
+.tbl.cmp th.abs { color: var(--blue); font-size: 13px; font-weight: 600; }
+.tbl.cmp th.brk { color: var(--purple); font-size: 13px; font-weight: 600; }
+.tbl.cmp td.better { font-weight: 700; background: rgba(76,195,138,.08); }
