@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
 
-  // v2 suma campos de contexto (opcionales). v1 se migra al abrir y queda intacta como respaldo.
+  // v2 suma el punto de entrada (opcional). v1 se migra al abrir y queda intacta como respaldo.
   var KEY = 'orb-bt:v2';
   var OLD_KEY = 'orb-bt:v1';
   var VERSION = 2;
@@ -12,10 +12,7 @@
 
   // Contexto del setup. null = no se cargó.
   var CTX = {
-    range: ['chico', 'normal', 'grande'], // tamaño de la vela 9:30–9:45 vs ATR diario
-    space: ['lt1', '1a2', 'gt2'],         // espacio hasta el próximo nivel, en R desde la entrada
-    candle: ['fuerte', 'debil'],          // calidad de la vela de ruptura
-    news: [true, false]                   // día de noticias
+    entry: ['fvg', 'ob', 'borde'] // punto de entrada: FVG, order block o borde del rango
   };
   var CTX_KEYS = Object.keys(CTX);
 
@@ -35,7 +32,7 @@
     if (!t || typeof t !== 'object') return null;
     var out = {
       id: t.id, date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
-      note: typeof t.note === 'string' ? t.note.slice(0, 300) : '', createdAt: t.createdAt
+      note: typeof t.note === 'string' ? t.note.slice(0, 500) : '', createdAt: t.createdAt
     };
     CTX_KEYS.forEach(function (k) { out[k] = CTX[k].indexOf(t[k]) !== -1 ? t[k] : null; });
     return out;
@@ -89,7 +86,7 @@
       var trade = normalize({
         id: uid(), date: t.date, type: t.type, rr: t.rr, result: t.result,
         mfe: t.mfe, note: t.note || '', createdAt: Date.now(),
-        range: t.range, space: t.space, candle: t.candle, news: t.news
+        entry: t.entry
       });
       if (!valid(trade)) return null;
       state.trades.push(trade);

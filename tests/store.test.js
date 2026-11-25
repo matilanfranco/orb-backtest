@@ -25,8 +25,7 @@ test('migra v1 a v2 sin perder trades y deja v1 como respaldo', () => {
   const all = DB.all();
   assert.strictEqual(all.length, 1);
   assert.strictEqual(all[0].id, 'a1');
-  assert.strictEqual(all[0].range, null);
-  assert.strictEqual(all[0].news, null);
+  assert.strictEqual(all[0].entry, null);
   assert.strictEqual(DB.getLastDate(), '2026-01-05');
   assert.strictEqual(data['orb-bt:v1'], v1Raw);
   const v2 = JSON.parse(data['orb-bt:v2']);
@@ -41,15 +40,22 @@ test('si ya hay v2, no vuelve a leer v1', () => {
   assert.strictEqual(DB.all().length, 0);
 });
 
-test('add guarda contexto válido y descarta valores raros', () => {
+test('add guarda el punto de entrada y descarta valores raros', () => {
   const { DB } = loadStore({});
-  const t = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1.5, result: 'SL', mfe: 1, note: '',
-    range: 'grande', space: 'gt2', candle: 'fuerte', news: false });
-  assert.ok(t);
-  assert.deepStrictEqual([t.range, t.space, t.candle, t.news], ['grande', 'gt2', 'fuerte', false]);
-  const u = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, range: 'enorme' });
+  for (const e of ['fvg', 'ob', 'borde']) {
+    const t = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1.5, result: 'SL', mfe: 1, note: '', entry: e });
+    assert.ok(t);
+    assert.strictEqual(t.entry, e);
+  }
+  const u = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, entry: 'otra' });
   assert.ok(u);
-  assert.strictEqual(u.range, null);
+  assert.strictEqual(u.entry, null);
+});
+
+test('la descripción se guarda hasta 500 caracteres', () => {
+  const { DB } = loadStore({});
+  const t = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, note: 'x'.repeat(600) });
+  assert.strictEqual(t.note.length, 500);
 });
 
 test('importa exportaciones v1 y no duplica', () => {
@@ -57,5 +63,5 @@ test('importa exportaciones v1 y no duplica', () => {
   const file = JSON.stringify({ version: 1, trades: [v1Trade] });
   assert.strictEqual(DB.importJSON(file), 1);
   assert.strictEqual(DB.importJSON(file), 0);
-  assert.strictEqual(DB.all()[0].candle, null);
+  assert.strictEqual(DB.all()[0].entry, null);
 });

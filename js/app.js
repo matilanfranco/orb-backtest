@@ -16,14 +16,8 @@
   ];
   // Campos de contexto (opcionales). Los valores tienen que coincidir con BTStore.CTX.
   var CTX_FIELDS = [
-    { k: 'range', label: 'Rango vs ATR diario', hint: 'vela 9:30–9:45', short: 'Rango',
-      opts: [['chico', 'Chico', '<15%'], ['normal', 'Normal', '15–30%'], ['grande', 'Grande', '>30%']] },
-    { k: 'space', label: 'Espacio hasta el próximo nivel', hint: 'PDH/PDL, Asia, Londres · en R desde la entrada', short: 'Espacio',
-      opts: [['lt1', '<1R'], ['1a2', '1–2R'], ['gt2', '>2R']] },
-    { k: 'candle', label: 'Vela de ruptura', short: 'Vela',
-      opts: [['fuerte', 'Fuerte', 'cuerpo grande / FVG'], ['debil', 'Débil']] },
-    { k: 'news', label: 'Día de noticias', short: 'Noticias',
-      opts: [[true, 'Sí'], [false, 'No']] }
+    { k: 'entry', label: 'Punto de entrada', short: 'Entrada en',
+      opts: [['fvg', 'FVG'], ['ob', 'OB'], ['borde', 'Borde del rango']] }
   ];
   var DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var TITLES = { log: 'Registrar', stats: 'Estadísticas', history: 'Historial' };
@@ -38,7 +32,7 @@
 
   /* ---------- helpers ---------- */
   function newDraft() {
-    return { type: null, rr: 1, result: null, mfe: null, note: '', range: null, space: null, candle: null, news: null };
+    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: null };
   }
   function pad(n) { return String(n).padStart(2, '0'); }
   function todayStr() {
@@ -75,7 +69,6 @@
     CTX_FIELDS.forEach(function (f) {
       var v = t[f.k];
       if (v === null || v === undefined) return;
-      if (f.k === 'news') { if (v) parts.push('Noticias'); else parts.push('Sin noticias'); return; }
       var lbl = ctxOptLabel(f, v);
       parts.push(f.short + ' ' + (/^[A-ZÁÉÍÓÚ][a-záéíóú]/.test(lbl) ? lbl.toLowerCase() : lbl));
     });
@@ -156,9 +149,8 @@
         '</div>' +
       '</section>' +
       '<section class="card">' +
-        '<h3>Contexto <small class="hint">(opcional · tocá de nuevo para quitar)</small></h3>' +
         CTX_FIELDS.map(function (f) {
-          return '<p class="lbl">' + f.label + (f.hint ? ' <span class="hint">· ' + f.hint + '</span>' : '') + '</p>' +
+          return '<p class="lbl">' + f.label + ' <span class="hint">· opcional, tocá de nuevo para quitar</span></p>' +
             '<div class="chips ctx">' +
               f.opts.map(function (o) {
                 return '<button class="chip' + (d[f.k] === o[0] ? ' sel' : '') + '" data-action="ctx" data-k="' + f.k +
@@ -166,8 +158,8 @@
               }).join('') +
             '</div>';
         }).join('') +
-        '<label class="lbl" for="note">Nota (opcional)</label>' +
-        '<input type="text" id="note" class="input" maxlength="300" placeholder="ej: FVG + estructura M1" value="' + esc(d.note) + '">' +
+        '<label class="lbl" for="note">Descripción (opcional)</label>' +
+        '<textarea id="note" class="input area" maxlength="500" rows="3" placeholder="ej: barrió el máximo y dejó FVG en M1">' + esc(d.note) + '</textarea>' +
       '</section>' +
       '<div class="row">' +
         '<button class="btn ghost" data-action="back">Atrás</button>' +
@@ -288,16 +280,16 @@
               (r.expectancy > 0 ? '+' : '') + r.expectancy.toFixed(2) + (b ? '★' : '') + '</td>';
           }).join('') + '</tr>';
       });
-      return '<p class="lbl">' + f.label + (g.missing ? ' <span class="hint">· ' + g.missing + ' sin dato</span>' : '') + '</p>' +
+      return (g.missing ? '<p class="hint">' + g.missing + ' trade' + (g.missing === 1 ? '' : 's') + ' sin punto de entrada marcado</p>' : '') +
         '<table class="tbl"><thead><tr><th></th><th>N</th>' +
         S.TARGETS.map(function (T) { return '<th>' + rrLabel(T) + '</th>'; }).join('') +
         '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
     }).join('');
     if (!tables) {
-      return '<section class="card"><h3>Take profit ideal por contexto</h3>' +
-        '<p class="hint">Todavía no cargaste contexto en ningún trade. Se carga (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
+      return '<section class="card"><h3>Take profit ideal por punto de entrada</h3>' +
+        '<p class="hint">Todavía no marcaste el punto de entrada en ningún trade. Se marca (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
     }
-    return '<section class="card"><h3>Take profit ideal por contexto</h3>' + tables +
+    return '<section class="card"><h3>Take profit ideal por punto de entrada</h3>' + tables +
       '<p class="hint">Expectativa en R por trade con cada objetivo. ★ = mejor objetivo del grupo. ' +
       'Los grupos con menos de 10 trades se ven atenuados: todavía no son confiables.</p></section>';
   }
@@ -337,8 +329,8 @@
         '<div class="top"><span class="date">' + esc(t.date) + '</span>' +
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
-        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (t.note ? ' · ' + esc(t.note) : '') + '</div>' +
-        (ctxSummary(t) ? '<div class="sub ctx">' + esc(ctxSummary(t)) + '</div>' : '') +
+        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (ctxSummary(t) ? ' · ' + esc(ctxSummary(t)) : '') + '</div>' +
+        (t.note ? '<div class="sub ctx">' + esc(t.note) + '</div>' : '') +
         '<button class="del" aria-label="Borrar trade" data-action="del" data-id="' + esc(t.id) + '">Borrar</button>' +
       '</div>';
     }).join('') + '</section>';
@@ -376,10 +368,10 @@
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
-    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'rango_atr', 'espacio_nivel', 'vela_ruptura', 'noticias', 'nota']];
-    function v(x) { return x === null || x === undefined ? '' : (x === true ? 'si' : (x === false ? 'no' : x)); }
+    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'descripcion']];
+    function v(x) { return x === null || x === undefined ? '' : x; }
     S.sortTrades(DB.all()).forEach(function (t) {
-      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, v(t.range), v(t.space), v(t.candle), v(t.news), t.note || '']);
+      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, v(t.entry), t.note || '']);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
   }
@@ -391,9 +383,6 @@
       DB.setLastDate(ui.date);
       ui.draft = newDraft();
       ui.draft.type = el.dataset.v;
-      // El rango y las noticias son del día: se copian del último trade cargado en esa fecha.
-      var sameDay = S.sortTrades(DB.all()).filter(function (t) { return t.date === ui.date; }).pop();
-      if (sameDay) { ui.draft.range = sameDay.range; ui.draft.news = sameDay.news; }
       ui.step = 1;
       render();
     },
@@ -416,7 +405,7 @@
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
       var t = DB.add({
         date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
-        range: d.range, space: d.space, candle: d.candle, news: d.news
+        entry: d.entry
       });
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
       ui.draft = newDraft();

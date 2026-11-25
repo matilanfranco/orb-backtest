@@ -140,3 +140,4 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .tbl td.bestc { font-weight: 700; }
 .tbl tr.low td { opacity: .5; }
 .item .sub.ctx { margin-top: 2px; font-size: 12px; }
+.input.area { min-height: 84px; resize: vertical; line-height: 1.4; }
