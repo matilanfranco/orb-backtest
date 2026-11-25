@@ -121,3 +121,25 @@ test('groupBy con "¿se formó FVG?" (booleano) separa sí y no', () => {
   assert.strictEqual(g.true.ideal.best, 1.5);
   assert.strictEqual(g.false.summary.n, 1);
 });
+
+test('idealTargets con objetivos de más de 2R: usa mfeX y deja afuera los >2 sin dato', () => {
+  const mk = (mfe, mfeX) => ({ result: 'TP', rr: 1, mfe, mfeX: mfeX === undefined ? null : mfeX });
+  const t = [mk(0), mk(1), mk(2), mk(3, 2.6), mk(3, 3.4), mk(3)];
+  const r = S.idealTargets(t, S.TARGETS_EXT);
+  const row = (T) => r.rows.find(x => x.target === T);
+  assert.strictEqual(row(2).hits, 4);          // hasta 2R cuentan todos (los >2 sin dato también)
+  assert.strictEqual(row(2).n, 6);
+  assert.strictEqual(row(2.5).n, 5);           // el >2 sin número queda afuera
+  assert.strictEqual(row(2.5).unknown, 1);
+  assert.strictEqual(row(2.5).hits, 2);
+  assert.strictEqual(row(3).hits, 1);
+  assert.strictEqual(row(4).hits, 0);
+  assert.ok(Math.abs(row(3).expectancy - (3 - 4) / 5) < 1e-9);
+  assert.strictEqual(S.hasExact(t), true);
+  assert.strictEqual(S.hasExact([mk(3)]), false);
+});
+
+test('idealTargets sin objetivos explícitos sigue evaluando 1, 1.5 y 2', () => {
+  const r = S.idealTargets([{ result: 'TP', rr: 1, mfe: 3, mfeX: 5 }]);
+  assert.deepStrictEqual(r.rows.map(x => x.target), [1, 1.5, 2]);
+});

@@ -4,6 +4,14 @@
 
   // Objetivos que se evalúan para el "take profit ideal".
   var TARGETS = [1, 1.5, 2];
+  // Objetivos extra cuando hay trades con el máximo exacto anotado (mfeX, solo en los de "más de 2:1").
+  var TARGETS_EXT = [1, 1.5, 2, 2.5, 3, 4];
+
+  // ¿El trade llegó a T? true / false / null (sin dato: pasó 2R pero no se anotó hasta dónde).
+  function reached(t, T) {
+    if (T <= 2 || t.mfe !== 3) return t.mfe >= T;
+    return typeof t.mfeX === 'number' ? t.mfeX >= T : null;
+  }
 
   // Resultado real de un trade en R: Take = +rr, SL = -1.
   function rOf(t) { return t.result === 'TP' ? t.rr : -1; }
@@ -59,24 +67,37 @@
   }
 
   // Take profit ideal: para cada objetivo T, un trade "gana" si el máximo movimiento a favor llegó a T,
-  // y si no llegó se asume pérdida de 1R.
-  function idealTargets(trades) {
-    var n = trades.length;
+  // y si no llegó se asume pérdida de 1R. Para objetivos de más de 2R solo cuentan los trades con dato
+  // (los de "más de 2:1" sin número quedan afuera de esa fila y se informan en `unknown`).
+  function idealTargets(trades, targets) {
     var rows = [];
     var best = null, bestExp = -Infinity;
-    if (!n) return { rows: rows, best: null };
-    TARGETS.forEach(function (T) {
-      var hits = trades.filter(function (t) { return t.mfe >= T; }).length;
+    if (!trades.length) return { rows: rows, best: null };
+    (targets || TARGETS).forEach(function (T) {
+      var hits = 0, n = 0;
+      trades.forEach(function (t) {
+        var r = reached(t, T);
+        if (r === null) return;
+        n++;
+        if (r) hits++;
+      });
+      var unknown = trades.length - n;
+      if (!n) return;
       var winRate = hits / n;
       var expectancy = (hits * T - (n - hits)) / n;
       var breakEven = 1 / (1 + T);
       rows.push({
-        target: T, n: n, hits: hits, reach: winRate,
+        target: T, n: n, hits: hits, reach: winRate, unknown: unknown,
         breakEven: breakEven, edge: winRate - breakEven, expectancy: expectancy
       });
       if (expectancy > bestExp) { bestExp = expectancy; best = T; }
     });
     return { rows: rows, best: best };
+  }
+
+  // ¿Hay algún trade con el máximo exacto anotado? (para mostrar objetivos de más de 2R)
+  function hasExact(trades) {
+    return trades.some(function (t) { return typeof t.mfeX === 'number'; });
   }
 
   // Cuántos trades terminaron en cada categoría de máximo movimiento.
@@ -120,6 +141,9 @@
 
   var api = {
     TARGETS: TARGETS,
+    TARGETS_EXT: TARGETS_EXT,
+    reached: reached,
+    hasExact: hasExact,
     rOf: rOf,
     sortTrades: sortTrades,
     summarize: summarize,

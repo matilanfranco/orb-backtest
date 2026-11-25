@@ -3,7 +3,7 @@
   'use strict';
 
   // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
-  var APP_VERSION = '2026-11-25.5';
+  var APP_VERSION = '2026-11-25.6';
 
   var S = window.BTStats;
   var DB = window.BTStore;
@@ -40,7 +40,8 @@
 
   /* ---------- helpers ---------- */
   function newDraft() {
-    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: [], fvgFormed: null };
+    // mfeXText: lo que se escribió en "¿hasta cuántos R?" (solo con "más de 2:1"); se valida al guardar.
+    return { type: null, rr: 1, result: null, mfe: null, mfeXText: '', note: '', entry: [], fvgFormed: null };
   }
   function pad(n) { return String(n).padStart(2, '0'); }
   function todayStr() {
@@ -52,8 +53,23 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function rrLabel(rr) { return rr === 1 ? '1:1' : (rr === 1.5 ? '1.5:1' : '2:1'); }
-  function mfeLabel(v) {
+  function rrLabel(rr) { return rr + ':1'; }
+  // Máximo exacto (solo "más de 2:1"): '' = sin dato, número > 2 (hasta MFEX_MAX), o NaN si lo escrito no sirve.
+  function parseMfeX(text) {
+    var s = String(text || '').trim().replace(',', '.');
+    if (!s) return null;
+    var v = Number(s);
+    return isFinite(v) && v > 2 && v <= DB.MFEX_MAX ? Math.round(v * 100) / 100 : NaN;
+  }
+  function mfeXInput(id, text, mini) {
+    var bad = text && isNaN(parseMfeX(text));
+    return '<div class="mfex' + (mini ? ' mini' : '') + '"><label for="' + id + '">¿Hasta cuántos R llegó?</label>' +
+      '<input id="' + id + '" class="input' + (mini ? ' mini' : '') + '" type="text" inputmode="decimal" autocomplete="off" ' +
+      'placeholder="ej: 3.2 · opcional" value="' + esc(text) + '"></div>' +
+      '<p class="hint mfex-bad"' + (bad ? '' : ' hidden') + '>Tiene que ser un número mayor a 2 (ej: 2.5 o 3.2).</p>';
+  }
+  function mfeLabel(v, exact) {
+    if (v === 3 && typeof exact === 'number') return exact + 'R';
     var o = MFE_OPTS.filter(function (x) { return x.v === v; })[0];
     return o ? o.label : '?';
   }
@@ -157,6 +173,7 @@
               (ok ? '' : ' disabled') + ' data-action="mfe" data-v="' + o.v + '">' + o.label + '</button>';
           }).join('') +
         '</div>' +
+        (d.mfe === 3 ? mfeXInput('mfex', d.mfeXText) : '') +
       '</section>' +
       '<section class="card">' +
         '<p class="lbl">Punto de entrada <span class="hint">· opcional, podés marcar varios</span></p>' +
@@ -204,6 +221,42 @@
       '</svg>';
   }
 
+  // ¿Hasta dónde llegaron los trades? % que alcanzó cada objetivo y cuál hubiera rendido más (RR ideal).
+  function reachCard(trades, ideal, ext) {
+    var n = trades.length;
+    var over2 = trades.filter(function (t) { return t.mfe === 3; }).length;
+    var noNum = trades.filter(function (t) { return t.mfe === 3 && typeof t.mfeX !== 'number'; }).length;
+    var bestRow = ideal.rows.filter(function (r) { return r.target === ideal.best; })[0];
+    var rows = ideal.rows.map(function (r) {
+      var b = r.target === ideal.best;
+      var tr = '<tr' + (b ? ' class="best"' : '') + '><td>' + rrLabel(r.target) + (b ? ' ★' : '') + '</td>' +
+        '<td>' + fmtPct(r.reach, 0) + ' <small>(' + r.hits + '/' + r.n + ')' + (r.unknown ? '*' : '') + '</small></td>' +
+        '<td>' + fmtPct(r.breakEven, 0) + '</td>' +
+        '<td class="' + cls(r.expectancy) + '">' + fmtR(r.expectancy) + '</td></tr>';
+      if (r.target === 2) {
+        tr += '<tr class="info"><td>Más de 2:1</td><td>' + fmtPct(over2 / n, 0) + ' <small>(' + over2 + '/' + n + ')</small></td>' +
+          '<td colspan="2"><small>' + (ext ? 'ver 2.5:1 en adelante' : 'sin saber cuánto más') + '</small></td></tr>';
+      }
+      return tr;
+    }).join('');
+    var tip = '';
+    if (over2 && !ext) {
+      tip = '<p class="hint">Para saber si 2.5:1 o 3:1 rinden más, anotá <b>hasta cuántos R llegó</b> cuando marcás ' +
+        '"Más de 2:1" (se puede agregar a los viejos con Editar en el Historial).</p>';
+    } else if (noNum) {
+      tip = '<p class="hint">* ' + noNum + ' trade' + (noNum === 1 ? '' : 's') + ' de "más de 2:1" sin número: ' +
+        'no cuentan en las filas de más de 2R. Podés completarlos con Editar en el Historial.</p>';
+    }
+    return '<section class="card"><h3>¿Hasta dónde llegaron? · RR ideal</h3>' +
+      (bestRow ? '<p class="ideal">RR ideal: <b>' + rrLabel(bestRow.target) + '</b> <span class="' + cls(bestRow.expectancy) + '">' +
+        fmtR(bestRow.expectancy) + ' por trade</span></p>' : '') +
+      '<table class="tbl"><thead><tr><th>Objetivo</th><th>Llegó</th><th>Necesario</th><th>Expectativa</th></tr></thead><tbody>' +
+      rows + '</tbody></table>' +
+      '<p class="hint">"Llegó" = % de trades en los que el precio alcanzó ese objetivo antes de volver al SL. ' +
+      '"Necesario" = % mínimo para no perder con ese objetivo. "Expectativa" = R promedio por trade si siempre hubieras puesto ' +
+      'el take ahí (los que no llegan cuentan −1R). ★ = el que más rinde.</p>' + tip + '</section>';
+  }
+
   function bestLabel(ideal) { return ideal.best === null ? '—' : rrLabel(ideal.best); }
 
   function viewStats() {
@@ -221,7 +274,8 @@
     }
 
     var s = S.summarize(trades);
-    var ideal = S.idealTargets(trades);
+    var ext = S.hasExact(trades);
+    var ideal = S.idealTargets(trades, ext ? S.TARGETS_EXT : S.TARGETS);
     var html = chips;
 
     if (s.n < 30) {
@@ -233,7 +287,7 @@
       card('Win rate', fmtPct(s.winRate, 1), '± ' + fmtPct(s.margin, 1) + ' (95%)') +
       card('R neto', fmtR(s.netR), '', cls(s.netR)) +
       card('Expectativa', fmtR(s.expectancy), 'por trade', cls(s.expectancy)) +
-      card('Profit factor', fmtPF(s.profitFactor), '', s.profitFactor >= 1 ? 'pos' : 'neg') +
+      card('Profit factor', fmtPF(s.profitFactor), 'R ganado ÷ R perdido', s.profitFactor >= 1 ? 'pos' : 'neg') +
       card('Máx. drawdown', '−' + s.maxDD.toFixed(2) + 'R', '', s.maxDD > 0 ? 'neg' : '') +
       card('Racha perdedora', s.maxLossStreak, 'máxima') +
       card('Racha ganadora', s.maxWinStreak, 'máxima') +
@@ -248,16 +302,7 @@
 
     html += '<section class="card"><h3>Curva de capital (R)</h3>' + (s.n > 1 ? equitySvg(s.equity) : '<p class="hint">Hacen falta al menos 2 trades.</p>') + '</section>';
 
-    html += '<section class="card"><h3>Take profit ideal</h3>' +
-      '<table class="tbl"><thead><tr><th>Objetivo</th><th>Llegó</th><th>Necesario</th><th>Expectativa</th></tr></thead><tbody>' +
-      ideal.rows.map(function (r) {
-        return '<tr' + (r.target === ideal.best ? ' class="best"' : '') + '><td>' + rrLabel(r.target) + (r.target === ideal.best ? ' ★' : '') + '</td>' +
-          '<td>' + fmtPct(r.reach, 0) + ' <small>(' + r.hits + '/' + r.n + ')</small></td>' +
-          '<td>' + fmtPct(r.breakEven, 0) + '</td>' +
-          '<td class="' + cls(r.expectancy) + '">' + fmtR(r.expectancy) + '</td></tr>';
-      }).join('') + '</tbody></table>' +
-      '<p class="hint">Con tus datos, el objetivo con mejor expectativa es <b>' + bestLabel(ideal) + '</b>. ' +
-      '"Llegó" = % de trades donde el máximo movimiento alcanzó ese objetivo; si no llegó, se asume pérdida de 1R.</p></section>';
+    html += reachCard(trades, ideal, ext);
 
     var dist = S.mfeDistribution(trades);
     var maxCount = Math.max.apply(null, MFE_OPTS.map(function (o) { return dist[o.v] || 0; })) || 1;
@@ -399,7 +444,7 @@
         '<div class="top"><span class="date">' + esc(t.date) + '</span>' +
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
-        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (entryLabel(t.entry) ? ' · Entrada en ' + esc(entryLabel(t.entry)) : '') +
+        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe, t.mfeX) + (entryLabel(t.entry) ? ' · Entrada en ' + esc(entryLabel(t.entry)) : '') +
           (fvgfLabel(t.fvgFormed) ? ' · ' + fvgfLabel(t.fvgFormed) : '') + '</div>' +
         (t.note ? '<div class="sub ctx">' + esc(t.note) + '</div>' : '') +
         '<div class="acts">' +
@@ -430,7 +475,8 @@
       row('R:R', chips('rr', RR_OPTS.map(function (v) { return [v, rrLabel(v)]; }), eq('rr'))) +
       row('Resultado', chips('result', [['TP', 'TP'], ['SL', 'SL']], eq('result'), ' res')) +
       row('Máx. mov.', chips('mfe', MFE_OPTS.map(function (o) { return [o.v, o.short]; }), eq('mfe')) +
-        (d.mfe === null ? '<p class="need">Elegí hasta dónde llegó</p>' : '')) +
+        (d.mfe === null ? '<p class="need">Elegí hasta dónde llegó</p>' : '') +
+        (d.mfe === 3 ? '<div class="need-wide">' + mfeXInput('emfex', d.mfeXText, true) + '</div>' : '')) +
       row('Entrada', chips('entry', ENTRY_OPTS.map(function (o) { return [o[0], o[1] === 'Borde del rango' ? 'Borde' : o[1]]; }),
         function (v) { return d.entry.indexOf(v) !== -1; })) +
       row('¿Impulso con FVG?', chips('fvgFormed', FVGF_OPTS, function (v) { return fvgfValue(v) === d.fvgFormed; })) +
@@ -477,9 +523,9 @@
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
-    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'impulso_con_fvg', 'descripcion']];
+    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'max_r', 'punto_entrada', 'impulso_con_fvg', 'descripcion']];
     S.sortTrades(DB.all()).forEach(function (t) {
-      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, (t.entry || []).join('+'),
+      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, t.mfeX === null || t.mfeX === undefined ? '' : t.mfeX, (t.entry || []).join('+'),
         t.fvgFormed === true ? 'si' : (t.fvgFormed === false ? 'no' : ''), t.note || '']);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
@@ -515,7 +561,11 @@
       ui.step = 3;
       render();
     },
-    mfe: function (el) { ui.draft.mfe = Number(el.dataset.v); render(); },
+    mfe: function (el) {
+      ui.draft.mfe = Number(el.dataset.v);
+      if (ui.draft.mfe !== 3) ui.draft.mfeXText = '';
+      render(true);
+    },
     entry: function (el) {
       var v = el.dataset.v, cur = ui.draft.entry;
       var next = cur.indexOf(v) === -1 ? cur.concat([v]) : cur.filter(function (x) { return x !== v; });
@@ -532,8 +582,10 @@
     save: function () {
       var d = ui.draft;
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
+      var mfeX = d.mfe === 3 ? parseMfeX(d.mfeXText) : null;
+      if (mfeX !== null && isNaN(mfeX)) { toast('"¿Hasta cuántos R?" tiene que ser mayor a 2'); return; }
       var data = {
-        date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
+        date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, mfeX: mfeX, note: d.note,
         entry: d.entry, fvgFormed: d.fvgFormed
       };
       var t = DB.add(data);
@@ -549,7 +601,8 @@
       var t = DB.all().filter(function (x) { return x.id === el.dataset.id; })[0];
       if (!t) return;
       if (hDirty() && !confirm('Tenés cambios sin guardar en otro trade. ¿Descartarlos?')) return;
-      var d = { date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice(), fvgFormed: t.fvgFormed === undefined ? null : t.fvgFormed };
+      var d = { date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
+        mfeXText: typeof t.mfeX === 'number' ? String(t.mfeX) : '', note: t.note || '', entry: (t.entry || []).slice(), fvgFormed: t.fvgFormed === undefined ? null : t.fvgFormed };
       ui.hEdit = { id: t.id, d: d, orig: JSON.stringify(d) };
       render(true);
       revealItem(t.id);
@@ -570,6 +623,7 @@
       }
       // Si cambia el R:R o el resultado, el máximo movimiento puede dejar de ser coherente.
       if (d.mfe !== null && !mfeAllowed(d.mfe, d.rr, d.result)) d.mfe = null;
+      if (d.mfe !== 3) d.mfeXText = '';
       render(true);
     },
     hsave: function () {
@@ -577,7 +631,13 @@
       if (!h) return;
       var d = h.d;
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
-      if (!DB.update(h.id, d)) { toast('No se pudo guardar el cambio'); return; }
+      var mfeX = d.mfe === 3 ? parseMfeX(d.mfeXText) : null;
+      if (mfeX !== null && isNaN(mfeX)) { toast('"¿Hasta cuántos R?" tiene que ser mayor a 2'); return; }
+      var data = {
+        date: d.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, mfeX: mfeX, note: d.note,
+        entry: d.entry, fvgFormed: d.fvgFormed
+      };
+      if (!DB.update(h.id, data)) { toast('No se pudo guardar el cambio'); return; }
       ui.hEdit = null;
       render(true);
       revealItem(h.id);
@@ -624,6 +684,11 @@
   viewEl.addEventListener('input', function (e) {
     if (e.target.id === 'note') ui.draft.note = e.target.value;
     else if (e.target.id === 'enote' && ui.hEdit) ui.hEdit.d.note = e.target.value;
+    else if (e.target.id === 'mfex' || (e.target.id === 'emfex' && ui.hEdit)) {
+      (e.target.id === 'mfex' ? ui.draft : ui.hEdit.d).mfeXText = e.target.value;
+      var warn = e.target.parentNode.parentNode.querySelector('.mfex-bad');
+      if (warn) warn.hidden = !(e.target.value.trim() && isNaN(parseMfeX(e.target.value)));
+    }
   });
   viewEl.addEventListener('change', function (e) {
     if (e.target.id === 'date') {

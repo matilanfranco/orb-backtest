@@ -2,13 +2,15 @@
 (function (root) {
   'use strict';
 
+  // v5: suma mfeX (máximo exacto en R, solo cuando mfe es "más de 2:1"; null = sin dato).
   // v4: suma fvgFormed (¿se formó FVG? true/false/null). Clave nueva para que una versión vieja de la app
   //     nunca lea ni pise datos con este campo.
   // v3: el punto de entrada pasa a ser multiselección (lista). v2 suma el punto de entrada; v1 es el original.
   // Al abrir se migra desde la versión más nueva que exista; las claves viejas quedan intactas como respaldo.
-  var KEY = 'orb-bt:v4';
-  var OLD_KEYS = ['orb-bt:v3', 'orb-bt:v2', 'orb-bt:v1'];
-  var VERSION = 4;
+  var KEY = 'orb-bt:v5';
+  var OLD_KEYS = ['orb-bt:v4', 'orb-bt:v3', 'orb-bt:v2', 'orb-bt:v1'];
+  var VERSION = 5;
+  var MFEX_MAX = 50;
   var TYPES = ['absorcion', 'ruptura'];
   var RRS = [1, 1.5, 2];
   var MFES = [0, 1, 1.5, 2, 3]; // 0 = menos de 1:1, 3 = más de 2:1
@@ -29,7 +31,16 @@
       MFES.indexOf(t.mfe) !== -1 &&
       typeof t.createdAt === 'number' &&
       validEntry(t.entry) &&
-      (t.fvgFormed === null || t.fvgFormed === true || t.fvgFormed === false);
+      (t.fvgFormed === null || t.fvgFormed === true || t.fvgFormed === false) &&
+      (t.mfeX === null || (t.mfe === 3 && typeof t.mfeX === 'number' && t.mfeX > 2 && t.mfeX <= MFEX_MAX));
+  }
+
+  // Máximo exacto: solo tiene sentido en "más de 2:1". Se redondea a 2 decimales; cualquier otra cosa queda null.
+  function normalizeMfeX(t) {
+    var v = t.mfeX;
+    if (t.mfe !== 3 || typeof v !== 'number' || !isFinite(v)) return null;
+    v = Math.round(v * 100) / 100;
+    return v > 2 && v <= MFEX_MAX ? v : null;
   }
 
   // v2 guardaba un valor suelto o null; v3 guarda una lista sin repetidos, en el orden de ENTRIES.
@@ -45,7 +56,8 @@
       id: t.id, date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
       note: typeof t.note === 'string' ? t.note.slice(0, 500) : '', createdAt: t.createdAt,
       entry: normalizeEntry(t.entry),
-      fvgFormed: t.fvgFormed === true || t.fvgFormed === false ? t.fvgFormed : null
+      fvgFormed: t.fvgFormed === true || t.fvgFormed === false ? t.fvgFormed : null,
+      mfeX: normalizeMfeX(t)
     };
   }
 
@@ -104,6 +116,7 @@
 
   var api = {
     ENTRIES: ENTRIES,
+    MFEX_MAX: MFEX_MAX,
     all: function () { return state.trades.slice(); },
     getLastDate: function () { return state.lastDate; },
     setLastDate: function (d) { state.lastDate = d; return persist(); },
@@ -123,7 +136,7 @@
       var trade = normalize({
         id: uid(), date: t.date, type: t.type, rr: t.rr, result: t.result,
         mfe: t.mfe, note: t.note || '', createdAt: Date.now(),
-        entry: t.entry, fvgFormed: t.fvgFormed
+        entry: t.entry, fvgFormed: t.fvgFormed, mfeX: t.mfeX
       });
       if (!valid(trade)) return null;
       state.trades.push(trade);
@@ -137,7 +150,7 @@
       var old = state.trades[i];
       var trade = normalize({
         id: old.id, date: t.date, type: t.type, rr: t.rr, result: t.result,
-        mfe: t.mfe, note: t.note || '', createdAt: old.createdAt, entry: t.entry, fvgFormed: t.fvgFormed
+        mfe: t.mfe, note: t.note || '', createdAt: old.createdAt, entry: t.entry, fvgFormed: t.fvgFormed, mfeX: t.mfeX
       });
       if (!valid(trade)) return null;
       state.trades[i] = trade;

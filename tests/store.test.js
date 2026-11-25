@@ -28,8 +28,8 @@ test('migra v1 a la versión actual sin perder trades y deja v1 como respaldo', 
   assert.deepStrictEqual(all[0].entry, []);
   assert.strictEqual(DB.getLastDate(), '2026-01-05');
   assert.strictEqual(data['orb-bt:v1'], v1Raw);
-  const cur = JSON.parse(data['orb-bt:v4']);
-  assert.strictEqual(cur.version, 4);
+  const cur = JSON.parse(data['orb-bt:v5']);
+  assert.strictEqual(cur.version, 5);
   assert.strictEqual(cur.trades.length, 1);
 });
 
@@ -47,13 +47,13 @@ test('migra v2 (entrada única) a lista y deja v2 como respaldo', () => {
   assert.deepStrictEqual(byId.b2.entry, []);
   assert.deepStrictEqual(byId.b3.entry, []);
   assert.strictEqual(data['orb-bt:v2'], v2Raw);
-  assert.strictEqual(JSON.parse(data['orb-bt:v4']).trades.length, 3);
+  assert.strictEqual(JSON.parse(data['orb-bt:v5']).trades.length, 3);
 });
 
-test('si ya hay v4, no vuelve a leer las viejas', () => {
-  const v4Raw = JSON.stringify({ version: 4, trades: [], lastDate: null });
+test('si ya hay v5, no vuelve a leer las viejas', () => {
+  const v5Raw = JSON.stringify({ version: 5, trades: [], lastDate: null });
   const v3Raw = JSON.stringify({ version: 3, trades: [v1Trade], lastDate: null });
-  const { DB } = loadStore({ 'orb-bt:v4': v4Raw, 'orb-bt:v3': v3Raw });
+  const { DB } = loadStore({ 'orb-bt:v5': v5Raw, 'orb-bt:v3': v3Raw });
   assert.strictEqual(DB.all().length, 0);
 });
 
@@ -94,7 +94,7 @@ test('update edita un trade y mantiene id y createdAt', () => {
     ['2026-03-03', 'ruptura', 1.5, 'TP', 2, 'corregido', ['fvg', 'ob']]);
   assert.strictEqual(DB.all().length, 2);
   assert.strictEqual(DB.all().find(t => t.id === b.id).note, '');
-  const saved = JSON.parse(data['orb-bt:v4']).trades.find(t => t.id === a.id);
+  const saved = JSON.parse(data['orb-bt:v5']).trades.find(t => t.id === a.id);
   assert.strictEqual(saved.note, 'corregido');
 });
 
@@ -136,7 +136,7 @@ test('markBackup se guarda y sobrevive a reabrir la app', () => {
   assert.strictEqual(reopened.all().length, 5);
 });
 
-test('migra v3 a v4 sin tocar v3 (respaldo para versiones viejas de la app)', () => {
+test('migra v3 a v5 sin tocar v3 (respaldo para versiones viejas de la app)', () => {
   const v3Raw = JSON.stringify({ version: 3, lastDate: '2026-11-20', lastBackup: 123, trades: [{ ...v1Trade, entry: ['fvg', 'ob'] }] });
   const { DB, data } = loadStore({ 'orb-bt:v3': v3Raw });
   assert.deepStrictEqual(DB.all()[0].entry, ['fvg', 'ob']);
@@ -145,7 +145,7 @@ test('migra v3 a v4 sin tocar v3 (respaldo para versiones viejas de la app)', ()
   assert.strictEqual(DB.backupStatus().lastBackup, 123);
   DB.add({ date: '2026-11-25', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, fvgFormed: true });
   assert.strictEqual(data['orb-bt:v3'], v3Raw);
-  assert.strictEqual(JSON.parse(data['orb-bt:v4']).trades.length, 2);
+  assert.strictEqual(JSON.parse(data['orb-bt:v5']).trades.length, 2);
 });
 
 test('guarda "¿se formó FVG?" (sí / no / sin dato), también al editar e importar', () => {
@@ -162,4 +162,34 @@ test('guarda "¿se formó FVG?" (sí / no / sin dato), también al editar e impo
   assert.strictEqual(byId.i1.fvgFormed, true);
   assert.strictEqual(byId.i2.fvgFormed, null);
   assert.strictEqual(DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1, result: 'TP', mfe: 1 }), null); // ya no es un tipo
+});
+
+test('migra v4 a v5 sin tocar v4; mfeX arranca en null', () => {
+  const v4Raw = JSON.stringify({ version: 4, lastDate: null, trades: [{ ...v1Trade, mfe: 3, entry: [], fvgFormed: true }] });
+  const { DB, data } = loadStore({ 'orb-bt:v4': v4Raw });
+  const t = DB.all()[0];
+  assert.strictEqual(t.mfeX, null);
+  assert.strictEqual(t.fvgFormed, true);
+  assert.strictEqual(data['orb-bt:v4'], v4Raw);
+  assert.strictEqual(JSON.parse(data['orb-bt:v5']).version, 5);
+});
+
+test('mfeX: se guarda solo con "más de 2:1" y mayor a 2', () => {
+  const { DB } = loadStore({});
+  const base = { date: '2026-11-25', type: 'ruptura', rr: 1, result: 'TP', entry: [] };
+  assert.strictEqual(DB.add({ ...base, mfe: 3, mfeX: 3.256 }).mfeX, 3.26);
+  assert.strictEqual(DB.add({ ...base, mfe: 2, mfeX: 3 }).mfeX, null);   // no es >2: se descarta
+  assert.strictEqual(DB.add({ ...base, mfe: 3, mfeX: 1.5 }).mfeX, null); // incoherente: se descarta
+  assert.strictEqual(DB.add({ ...base, mfe: 3 }).mfeX, null);
+  const t = DB.add({ ...base, mfe: 3, mfeX: 2.5 });
+  const u = DB.update(t.id, { ...base, mfe: 3, mfeX: 4 });
+  assert.strictEqual(u.mfeX, 4);
+  assert.strictEqual(DB.update(t.id, { ...base, mfe: 1.5, mfeX: 4 }).mfeX, null); // al bajar el máximo se borra
+});
+
+test('importar conserva mfeX', () => {
+  const { DB } = loadStore({});
+  const file = JSON.stringify({ version: 5, trades: [{ ...v1Trade, id: 'x9', mfe: 3, mfeX: 3.5, entry: [], fvgFormed: null }] });
+  assert.strictEqual(DB.importJSON(file), 1);
+  assert.strictEqual(DB.all()[0].mfeX, 3.5);
 });

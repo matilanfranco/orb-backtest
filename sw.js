@@ -2,7 +2,7 @@
    Estrategia "primero la red": con internet siempre trae la versión nueva (y la guarda);
    sin internet, o si la red tarda más de 4 segundos, responde con lo guardado.
    Al cambiar la lista de archivos, subir el número de CACHE para limpiar la caché vieja. */
-const CACHE = 'orb-bt-v2';
+const CACHE = 'orb-bt-v3';
 const NET_TIMEOUT = 4000;
 const ASSETS = [
   './',

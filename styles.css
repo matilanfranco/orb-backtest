@@ -173,3 +173,14 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .erow .need { grid-column: 1 / -1; margin: 4px 0 0; color: var(--amber); font-size: 12px; }
 .erow-btns { margin-top: 10px; }
 .erow-btns .btn { min-height: 46px; }
+
+/* máximo exacto (más de 2:1) y RR ideal */
+.mfex { margin-top: 12px; }
+.mfex label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.mfex.mini { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.mfex.mini label { margin: 0; font-size: 12px; white-space: nowrap; }
+.mfex.mini .input { flex: 1; min-width: 0; }
+.mfex-bad { color: var(--amber); margin: 6px 0 0; }
+.erow .need-wide { grid-column: 1 / -1; }
+.ideal { font-size: 17px; margin: 0 0 10px; }
+.tbl tr.info td { color: var(--muted); }
