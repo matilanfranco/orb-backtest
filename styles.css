@@ -157,14 +157,23 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .tbl.cmp td { font-size: 13px; }
 .tbl.cmp td.better { font-weight: 700; background: rgba(76,195,138,.08); }
 
-/* edición */
-.editbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(240,180,41,.12);
-  border: 1px solid rgba(240,180,41,.5); color: var(--amber); border-radius: 12px; padding: 6px 6px 6px 14px; margin-bottom: 12px; font-weight: 600; }
-.editbar .chip { flex: 0 0 auto; min-height: 40px; font-size: 14px; }
-.btn.cur { outline: 3px solid var(--text); outline-offset: 2px; }
 
 /* backup y versión */
 .warn.backup { display: flex; align-items: center; gap: 10px; }
 .warn.backup span { flex: 1; }
 .warn.backup .chip { flex: 0 0 auto; min-height: 40px; font-size: 14px; color: var(--amber); border-color: rgba(240,180,41,.5); }
 .hint.ver { margin-top: 10px; font-size: 12px; }
+
+/* edición en el historial */
+.item.editing { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); padding: 10px 12px 12px; }
+.erow { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 8px; margin-bottom: 8px; }
+.erow .el { color: var(--muted); font-size: 12px; }
+.chips.mini { gap: 6px; flex-wrap: nowrap; }
+.chips.mini .chip { min-height: 40px; padding: 4px 6px; font-size: 14px; border-radius: 10px; min-width: 0; }
+.chips.mini.res .chip.sel[data-v="TP"] { background: var(--green); border-color: var(--green); }
+.chips.mini.res .chip.sel[data-v="SL"] { background: var(--red); border-color: var(--red); }
+.input.mini { min-height: 40px; padding: 6px 10px; }
+.input.area.mini { min-height: 56px; margin-top: 2px; }
+.erow .need { grid-column: 1 / -1; margin: 4px 0 0; color: var(--amber); font-size: 12px; }
+.erow-btns { margin-top: 10px; }
+.erow-btns .btn { min-height: 46px; }

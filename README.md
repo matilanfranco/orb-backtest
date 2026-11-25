@@ -13,6 +13,8 @@ Sin dependencias ni build: HTML + CSS + JS puro.
 5. **Punto de entrada (opcional)**, en la misma pantalla: **FVG**, **OB** y/o **Borde del rango**. Podés marcar varios; tocá de nuevo para desmarcar. Abajo hay un cuadro de **descripción** libre (opcional).
 6. **Guardar**. La fecha queda seleccionada para cargar varios trades del mismo día.
 
+**Editar un trade:** Historial → *Editar*. La tarjeta se abre ahí mismo con todo en versión compacta (fecha, tipo, R:R, resultado, máximo movimiento, punto de entrada, descripción). *Guardar* la cierra en el mismo lugar, así pasás directo al siguiente. Si abrís otro con cambios sin guardar, te pregunta antes de descartarlos.
+
 ## Estadísticas
 
 Filtrables por tipo de entrada (todas / absorción / ruptura / imbalance):

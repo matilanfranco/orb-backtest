@@ -41,7 +41,7 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
 
 ## Ideas para seguir (por orden de valor)
 1. ~~Punto de entrada~~ (hecho: FVG / OB / borde del rango, multiselección desde v3, con tabla de TP ideal por punto de entrada). A Mati **no** le interesan campos como rango vs ATR, PDH/PDL, Asia/Londres o noticias: no proponerlos.
-2. ~~Editar un trade existente desde el historial~~ (hecho: botón Editar → `DB.update`, mantiene id y createdAt).
+2. ~~Editar un trade existente desde el historial~~ (hecho: edición *inline* en la tarjeta del historial — `itemEditor()` en `js/app.js`, guarda con `DB.update`, mantiene id y createdAt. Mati quiere poder editar uno tras otro sin cambiar de pantalla).
 3. Filtro por rango de fechas en Estadísticas.
 4. MFE exacto en R (número libre) en vez de categorías, para ver el TP ideal con más resolución.
 5. Foto/captura por trade.

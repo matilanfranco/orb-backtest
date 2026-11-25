@@ -3,7 +3,7 @@
   'use strict';
 
   // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
-  var APP_VERSION = '2026-11-25.2';
+  var APP_VERSION = '2026-11-25.3';
 
   var S = window.BTStats;
   var DB = window.BTStore;
@@ -13,11 +13,11 @@
   var TYPE_SHORT = { absorcion: 'Absorción', ruptura: 'Ruptura', imbalance: 'Imbalance' };
   var RR_OPTS = [1, 1.5, 2];
   var MFE_OPTS = [
-    { v: 0, label: 'Menos de 1:1' },
-    { v: 1, label: '1:1' },
-    { v: 1.5, label: '1.5:1' },
-    { v: 2, label: '2:1' },
-    { v: 3, label: 'Más de 2:1' }
+    { v: 0, label: 'Menos de 1:1', short: '<1' },
+    { v: 1, label: '1:1', short: '1' },
+    { v: 1.5, label: '1.5:1', short: '1.5' },
+    { v: 2, label: '2:1', short: '2' },
+    { v: 3, label: 'Más de 2:1', short: '>2' }
   ];
   // Punto de entrada (multiselección). Los valores tienen que coincidir con BTStore.ENTRIES.
   var ENTRY_OPTS = [['fvg', 'FVG'], ['ob', 'OB'], ['borde', 'Borde del rango']];
@@ -26,8 +26,7 @@
 
   var ui = {
     persisted: false, // el navegador aceptó no borrar los datos
-    editId: null,   // id del trade que se está editando (null = registrando uno nuevo)
-    prevDate: null, // fecha de registro a restaurar al terminar de editar
+    hEdit: null,      // edición en el historial: { id, d: borrador, orig: JSON del original }
     tab: 'log',
     step: 0,
     date: DB.getLastDate() || todayStr(),
@@ -94,24 +93,22 @@
   /* ---------- registrar ---------- */
   function viewLog() {
     var d = ui.draft;
-    var editBar = ui.editId ? '<div class="editbar"><span>Editando trade</span>' +
-      '<button class="chip" data-action="cancel-edit">Cancelar</button></div>' : '';
     if (ui.step === 0) {
       var count = DB.all().filter(function (t) { return t.date === ui.date; }).length;
-      return editBar + (ui.editId ? '' : backupBanner()) +
+      return backupBanner() +
         '<section class="card">' +
           '<label class="lbl" for="date">Fecha del setup</label>' +
           '<input type="date" id="date" class="input" value="' + esc(ui.date) + '" max="' + todayStr() + '">' +
-          (ui.editId ? '' : '<p class="hint">Trades guardados en esta fecha: <b>' + count + '</b></p>') +
+          '<p class="hint">Trades guardados en esta fecha: <b>' + count + '</b></p>' +
         '</section>' +
         '<section class="stack">' +
-          '<button class="btn big abs' + (ui.editId && d.type === 'absorcion' ? ' cur' : '') + '" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
-          '<button class="btn big brk' + (ui.editId && d.type === 'ruptura' ? ' cur' : '') + '" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
-          '<button class="btn big imb' + (ui.editId && d.type === 'imbalance' ? ' cur' : '') + '" data-action="type" data-v="imbalance">Ruptura con imbalance</button>' +
+          '<button class="btn big abs" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
+          '<button class="btn big brk" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
+          '<button class="btn big imb" data-action="type" data-v="imbalance">Ruptura con imbalance</button>' +
         '</section>';
     }
 
-    var crumb = editBar + '<p class="crumb">' + esc(ui.date) + ' · <b>' + TYPE_LABEL[d.type] + '</b>' +
+    var crumb = '<p class="crumb">' + esc(ui.date) + ' · <b>' + TYPE_LABEL[d.type] + '</b>' +
       (ui.step >= 2 ? ' · ' + rrLabel(d.rr) : '') +
       (ui.step >= 3 ? ' · ' + d.result : '') + '</p>';
 
@@ -172,7 +169,7 @@
       '</section>' +
       '<div class="row">' +
         '<button class="btn ghost" data-action="back">Atrás</button>' +
-        '<button class="btn primary" data-action="save"' + (d.mfe === null ? ' disabled' : '') + '>' + (ui.editId ? 'Guardar cambios' : 'Guardar') + '</button>' +
+        '<button class="btn primary" data-action="save"' + (d.mfe === null ? ' disabled' : '') + '>Guardar</button>' +
       '</div>';
   }
 
@@ -374,8 +371,9 @@
     if (!list.length) return html + '<section class="card empty"><p>No hay trades guardados.</p></section>';
 
     html += '<section class="list">' + list.map(function (t) {
+      if (ui.hEdit && ui.hEdit.id === t.id) return itemEditor(t, ui.hEdit.d);
       var r = S.rOf(t);
-      return '<div class="item">' +
+      return '<div class="item" id="it-' + esc(t.id) + '">' +
         '<div class="top"><span class="date">' + esc(t.date) + '</span>' +
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
@@ -390,15 +388,47 @@
     return html;
   }
 
+  // Editor compacto dentro de la tarjeta del historial.
+  function itemEditor(t, d) {
+    function chips(field, opts, isOn, extra) {
+      return '<div class="chips mini' + (extra || '') + '">' + opts.map(function (o) {
+        var on = isOn(o[0]);
+        var dis = field === 'mfe' && !mfeAllowed(o[0], d.rr, d.result);
+        return '<button class="chip' + (on ? ' sel' : '') + '"' + (dis ? ' disabled' : '') +
+          ' data-action="hset" data-f="' + field + '" data-v="' + o[0] + '">' + esc(o[1]) + '</button>';
+      }).join('') + '</div>';
+    }
+    function eq(field) { return function (v) { return d[field] === v; }; }
+    function row(label, content) { return '<div class="erow"><span class="el">' + label + '</span>' + content + '</div>'; }
+    var ok = d.mfe !== null && mfeAllowed(d.mfe, d.rr, d.result) && /^\d{4}-\d{2}-\d{2}$/.test(d.date);
+    return '<div class="item editing" id="it-' + esc(t.id) + '">' +
+      row('Fecha', '<input type="date" id="edate" class="input mini" value="' + esc(d.date) + '" max="' + todayStr() + '">') +
+      row('Tipo', chips('type', TYPES.map(function (k) { return [k, TYPE_SHORT[k]]; }), eq('type'))) +
+      row('R:R', chips('rr', RR_OPTS.map(function (v) { return [v, rrLabel(v)]; }), eq('rr'))) +
+      row('Resultado', chips('result', [['TP', 'TP'], ['SL', 'SL']], eq('result'), ' res')) +
+      row('Máx. mov.', chips('mfe', MFE_OPTS.map(function (o) { return [o.v, o.short]; }), eq('mfe')) +
+        (d.mfe === null ? '<p class="need">Elegí hasta dónde llegó</p>' : '')) +
+      row('Entrada', chips('entry', ENTRY_OPTS.map(function (o) { return [o[0], o[1] === 'Borde del rango' ? 'Borde' : o[1]]; }),
+        function (v) { return d.entry.indexOf(v) !== -1; })) +
+      '<textarea id="enote" class="input area mini" maxlength="500" rows="2" placeholder="Descripción (opcional)">' + esc(d.note) + '</textarea>' +
+      '<div class="row erow-btns">' +
+        '<button class="btn ghost" data-action="hcancel">Cancelar</button>' +
+        '<button class="btn primary" data-action="hsave"' + (ok ? '' : ' disabled') + '>Guardar</button>' +
+      '</div>' +
+    '</div>';
+  }
+
   /* ---------- render ---------- */
-  function render() {
+  // keepScroll: no volver arriba (para cambios dentro de la misma pantalla).
+  function render(keepScroll) {
+    var y = window.scrollY;
     document.getElementById('title').textContent = TITLES[ui.tab];
     var view = document.getElementById('view');
     view.innerHTML = ui.tab === 'log' ? viewLog() : (ui.tab === 'stats' ? viewStats() : viewHistory());
     Array.prototype.forEach.call(document.querySelectorAll('.tabbar button'), function (b) {
       b.classList.toggle('active', b.dataset.tab === ui.tab);
     });
-    window.scrollTo(0, 0);
+    window.scrollTo(0, keepScroll ? y : 0);
   }
 
   /* ---------- archivos ---------- */
@@ -431,27 +461,21 @@
   }
 
   /* ---------- acciones ---------- */
-  // Termina la edición (guardada o cancelada) y vuelve al historial.
-  function endEdit() {
-    ui.editId = null;
-    ui.date = ui.prevDate || DB.getLastDate() || todayStr();
-    ui.prevDate = null;
-    ui.draft = newDraft();
-    ui.step = 0;
-    ui.tab = 'history';
-    render();
+  function hDirty() { return ui.hEdit && JSON.stringify(ui.hEdit.d) !== ui.hEdit.orig; }
+  // Muestra la tarjeta en pantalla si quedó fuera (al abrir o cerrar un editor).
+  function revealItem(id) {
+    var el = document.getElementById('it-' + id);
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    if (r.top < 60 || r.bottom > window.innerHeight - 70) el.scrollIntoView({ block: 'nearest' });
   }
 
   var actions = {
     type: function (el) {
       if (!ui.date) { toast('Elegí una fecha'); return; }
-      if (ui.editId) {
-        ui.draft.type = el.dataset.v; // al editar se conserva el resto
-      } else {
-        DB.setLastDate(ui.date);
-        ui.draft = newDraft();
-        ui.draft.type = el.dataset.v;
-      }
+      DB.setLastDate(ui.date);
+      ui.draft = newDraft();
+      ui.draft.type = el.dataset.v;
       ui.step = 1;
       render();
     },
@@ -481,12 +505,6 @@
         date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
         entry: d.entry
       };
-      if (ui.editId) {
-        if (!DB.update(ui.editId, data)) { toast('No se pudo guardar el cambio'); return; }
-        endEdit();
-        toast('Cambios guardados ✓');
-        return;
-      }
       var t = DB.add(data);
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
       askPersistence();
@@ -495,24 +513,54 @@
       render();
       toast('Guardado ✓  ' + fmtR(S.rOf(t)));
     },
+    // Edición en el historial: abre la tarjeta con un editor compacto.
     edit: function (el) {
       var t = DB.all().filter(function (x) { return x.id === el.dataset.id; })[0];
       if (!t) return;
-      if (!ui.editId) ui.prevDate = ui.date;
-      ui.editId = t.id;
-      ui.date = t.date;
-      ui.draft = { type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice() };
-      ui.step = 3; // arranca en la pantalla más usada; con Atrás se cambia el resto
-      ui.tab = 'log';
-      render();
+      if (hDirty() && !confirm('Tenés cambios sin guardar en otro trade. ¿Descartarlos?')) return;
+      var d = { date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice() };
+      ui.hEdit = { id: t.id, d: d, orig: JSON.stringify(d) };
+      render(true);
+      revealItem(t.id);
     },
-    'cancel-edit': function () { endEdit(); },
+    hset: function (el) {
+      var d = ui.hEdit && ui.hEdit.d;
+      if (!d) return;
+      var f = el.dataset.f, v = el.dataset.v;
+      if (f === 'rr' || f === 'mfe') v = Number(v);
+      if (f === 'entry') {
+        var next = d.entry.indexOf(v) === -1 ? d.entry.concat([v]) : d.entry.filter(function (x) { return x !== v; });
+        d.entry = ENTRY_OPTS.map(function (o) { return o[0]; }).filter(function (x) { return next.indexOf(x) !== -1; });
+      } else {
+        d[f] = v;
+      }
+      // Si cambia el R:R o el resultado, el máximo movimiento puede dejar de ser coherente.
+      if (d.mfe !== null && !mfeAllowed(d.mfe, d.rr, d.result)) d.mfe = null;
+      render(true);
+    },
+    hsave: function () {
+      var h = ui.hEdit;
+      if (!h) return;
+      var d = h.d;
+      if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
+      if (!DB.update(h.id, d)) { toast('No se pudo guardar el cambio'); return; }
+      ui.hEdit = null;
+      render(true);
+      revealItem(h.id);
+      toast('Cambios guardados ✓');
+    },
+    hcancel: function () {
+      var id = ui.hEdit && ui.hEdit.id;
+      ui.hEdit = null;
+      render(true);
+      if (id) revealItem(id);
+    },
     filter: function (el) { ui.filter = el.dataset.v; render(); },
     del: function (el) {
       if (!confirm('¿Borrar este trade?')) return;
       DB.remove(el.dataset.id);
-      if (ui.editId === el.dataset.id) { endEdit(); return; } // se borró el que se estaba editando
-      render();
+      if (ui.hEdit && ui.hEdit.id === el.dataset.id) ui.hEdit = null;
+      render(true);
     },
     'export-json': function () {
       var day = todayStr();
@@ -541,11 +589,15 @@
   });
   viewEl.addEventListener('input', function (e) {
     if (e.target.id === 'note') ui.draft.note = e.target.value;
+    else if (e.target.id === 'enote' && ui.hEdit) ui.hEdit.d.note = e.target.value;
   });
   viewEl.addEventListener('change', function (e) {
     if (e.target.id === 'date') {
       ui.date = e.target.value;
       render();
+    } else if (e.target.id === 'edate' && ui.hEdit) {
+      ui.hEdit.d.date = e.target.value;
+      render(true);
     } else if (e.target.id === 'importFile') {
       var file = e.target.files && e.target.files[0];
       if (!file) return;
@@ -582,7 +634,7 @@
     // Cuando se instala una versión nueva, recarga sola (salvo que estés a mitad de un registro).
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (!hadController || reloaded) return;
-      if (ui.step === 0 && !ui.editId) { reloaded = true; location.reload(); }
+      if (ui.step === 0 && !ui.hEdit) { reloaded = true; location.reload(); }
       else toast('Hay una versión nueva: se aplica al volver a abrir la app');
     });
     window.addEventListener('load', function () {
