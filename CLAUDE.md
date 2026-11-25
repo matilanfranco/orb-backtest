@@ -1,16 +1,17 @@
 # ORB Backtest Log — contexto del proyecto
 
 ## Qué es y para qué
-App móvil (PWA) para que Mati registre a mano un backtesting de su estrategia **ORB sobre NQ/Nasdaq**: la primera vela de M15 de la apertura de NY (9:30–9:45) marca el rango, y opera dos tipos de entrada:
+App móvil (PWA) para que Mati registre a mano un backtesting de su estrategia **ORB sobre NQ/Nasdaq**: la primera vela de M15 de la apertura de NY (9:30–9:45) marca el rango, y opera tres tipos de entrada:
 
 - **Absorción**: una vela de M5 cierra dentro del rango tras una ruptura fallida; entra por orden stop, con el SL en la última mecha/estructura que absorbió. Objetivo 1:1.
 - **Ruptura**: espera la ruptura y entra con orden límite en un FVG, con el SL en una zona de estructura de M1. Objetivo 1:1.
+- **Ruptura con imbalance** (`imbalance`): tercer tipo, agregado a pedido de Mati; se registra y compara aparte.
 
 La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1, 1.5:1, 2:1) y qué tipo de entrada rinde mejor?** Quiere distinguir los setups de 1.5 de los de 1.1, así que más adelante conviene sumar campos de contexto para filtrar (ver ideas).
 
 ## Reglas del proyecto
 - **Sin build ni dependencias**: HTML/CSS/JS puro con `<script>` clásicos (no módulos ES, para que también abra desde `file://`).
-- **Offline primero**: todo en `localStorage` (clave `orb-bt:v3`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js` y subí el número de `CACHE`.
+- **Offline primero**: todo en `localStorage` (clave `orb-bt:v4`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js` y subí el número de `CACHE`.
 - **Publicada en GitHub Pages**: https://matilanfranco.github.io/orb-backtest/ (rama `main`, raíz). El SW es *network-first* con timeout de 4 s y `cache: 'no-cache'`: con internet trae siempre lo último; sin internet usa la caché.
 - **En cada cambio publicado, actualizar `APP_VERSION` en `js/app.js`** (fecha). Se ve en Historial y es la forma de confirmar que el celu tomó la versión nueva.
 - UI en **español**, pensada para celu (botones grandes, una mano). Mantener simple el flujo de registro: pocas pantallas, pocos toques.
@@ -19,14 +20,15 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
 
 ## Modelo de datos (un trade)
 ```js
-{ id, date: 'YYYY-MM-DD', type: 'absorcion' | 'ruptura',
+{ id, date: 'YYYY-MM-DD', type: 'absorcion' | 'ruptura' | 'imbalance',
   rr: 1 | 1.5 | 2, result: 'TP' | 'SL',
   mfe: 0 | 1 | 1.5 | 2 | 3,   // máximo movimiento a favor antes de volver al SL: 0 = <1R, 3 = >2R
   note: string,            // descripción libre, hasta 500 caracteres
   createdAt: number,
   entry: Array<'fvg' | 'ob' | 'borde'> }  // punto de entrada, multiselección (puede quedar vacía), sin repetidos y en ese orden
 ```
-- Guardado en `orb-bt:v3`. Al abrir, si no existe, se migra desde `orb-bt:v2` o `orb-bt:v1` (las viejas quedan intactas como respaldo). v2 guardaba `entry` como valor único o null; v3 lo pasa a lista. `normalize()` en `js/store.js` lleva cualquier trade v1/v2/v3 al formato actual; Importar acepta todos.
+- Guardado en `orb-bt:v4`. Al abrir, si no existe, se migra desde `orb-bt:v3`, `v2` o `v1` (las viejas quedan intactas como respaldo). v2 guardaba `entry` como valor único o null; v3 lo pasa a lista; v4 suma el tipo `imbalance` (clave nueva para que una versión vieja de la app no lea esos trades y los descarte). `normalize()` en `js/store.js` lleva cualquier trade al formato actual; Importar acepta todas las versiones.
+- **Regla**: agregar un valor nuevo a un campo validado (tipo, R:R, MFE, punto de entrada) también es cambio de formato → subir la clave.
 - Estadísticas por punto de entrada con `groupByTags`: un trade con varias marcas cuenta en cada grupo.
 - R real del trade: `TP → +rr`, `SL → −1`.
 - Validaciones de consistencia en la UI: con TP, `mfe >= rr`; con SL, `mfe < rr`.

@@ -3,12 +3,14 @@
   'use strict';
 
   // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
-  var APP_VERSION = '2026-11-25';
+  var APP_VERSION = '2026-11-25.2';
 
   var S = window.BTStats;
   var DB = window.BTStore;
 
-  var TYPE_LABEL = { absorcion: 'Absorción', ruptura: 'Ruptura' };
+  var TYPES = ['absorcion', 'ruptura', 'imbalance'];
+  var TYPE_LABEL = { absorcion: 'Absorción', ruptura: 'Ruptura', imbalance: 'Ruptura con imbalance' };
+  var TYPE_SHORT = { absorcion: 'Absorción', ruptura: 'Ruptura', imbalance: 'Imbalance' };
   var RR_OPTS = [1, 1.5, 2];
   var MFE_OPTS = [
     { v: 0, label: 'Menos de 1:1' },
@@ -105,6 +107,7 @@
         '<section class="stack">' +
           '<button class="btn big abs' + (ui.editId && d.type === 'absorcion' ? ' cur' : '') + '" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
           '<button class="btn big brk' + (ui.editId && d.type === 'ruptura' ? ' cur' : '') + '" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
+          '<button class="btn big imb' + (ui.editId && d.type === 'imbalance' ? ' cur' : '') + '" data-action="type" data-v="imbalance">Ruptura con imbalance</button>' +
         '</section>';
     }
 
@@ -201,7 +204,7 @@
     var trades = ui.filter === 'all' ? all : all.filter(function (t) { return t.type === ui.filter; });
 
     var chips = '<div class="chips tight">' +
-      [['all', 'Todas'], ['absorcion', 'Absorción'], ['ruptura', 'Ruptura']].map(function (f) {
+      [['all', 'Todas']].concat(TYPES.map(function (k) { return [k, TYPE_SHORT[k]]; })).map(function (f) {
         return '<button class="chip' + (ui.filter === f[0] ? ' sel' : '') + '" data-action="filter" data-v="' + f[0] + '">' + f[1] + '</button>';
       }).join('') + '</div>';
 
@@ -268,15 +271,14 @@
     return html;
   }
 
-  // Absorción vs. ruptura, lado a lado. Resalta el mejor de cada fila.
+  // Tipos de entrada lado a lado. Resalta el mejor de cada fila.
   function typeCompare(trades) {
     var g = S.groupBy(trades, function (t) { return t.type; });
-    var a = g.absorcion, r = g.ruptura;
     var NA = '<span class="hint">—</span>';
     // [etiqueta, valor a mostrar, número para comparar, más alto es mejor?, color]
     var metrics = [
-      ['Trades', function (x) { return x.summary.n + ' <small>(' + x.summary.wins + ' TP · ' + x.summary.losses + ' SL)</small>'; }],
-      ['Win rate', function (x) { return fmtPct(x.summary.winRate, 1) + ' <small>± ' + fmtPct(x.summary.margin, 0) + '</small>'; },
+      ['Trades', function (x) { return x.summary.n + '<br><small>' + x.summary.wins + ' TP · ' + x.summary.losses + ' SL</small>'; }],
+      ['Win rate', function (x) { return fmtPct(x.summary.winRate, 1) + '<br><small>± ' + fmtPct(x.summary.margin, 0) + '</small>'; },
         function (x) { return x.summary.winRate; }, true],
       ['Win rate mínimo', function (x) { return fmtPct(x.summary.breakEvenWR, 1); }],
       ['R neto', function (x) { return fmtR(x.summary.netR); }, function (x) { return x.summary.netR; }, true, function (x) { return cls(x.summary.netR); }],
@@ -287,23 +289,28 @@
       ['Racha perdedora', function (x) { return x.summary.maxLossStreak; }, function (x) { return x.summary.maxLossStreak; }, false],
       ['TP ideal', function (x) { return bestLabel(x.ideal); }]
     ];
+    var present = TYPES.filter(function (k) { return g[k]; });
     var rows = metrics.map(function (m) {
-      var better = null;
-      if (m[2] && a && r) {
-        var va = m[2](a), vr = m[2](r);
-        if (va !== vr) better = (va > vr) === m[3] ? 'a' : 'r';
+      // El mejor de la fila (solo si hay al menos 2 tipos con datos y no empatan todos).
+      var best = null;
+      if (m[2] && present.length > 1) {
+        var vals = present.map(function (k) { return m[2](g[k]); });
+        var top = m[3] ? Math.max.apply(null, vals) : Math.min.apply(null, vals);
+        var winners = present.filter(function (k, i) { return vals[i] === top; });
+        if (winners.length < present.length) best = winners;
       }
-      function cell(x, side) {
+      return '<tr><th scope="row">' + m[0] + '</th>' + TYPES.map(function (k) {
+        var x = g[k];
         if (!x) return '<td>' + NA + '</td>';
-        var c = (m[4] ? m[4](x) : '') + (better === side ? ' better' : '');
+        var c = (m[4] ? m[4](x) : '') + (best && best.indexOf(k) !== -1 ? ' better' : '');
         return '<td class="' + c + '">' + m[1](x) + '</td>';
-      }
-      return '<tr><th scope="row">' + m[0] + '</th>' + cell(a, 'a') + cell(r, 'r') + '</tr>';
+      }).join('') + '</tr>';
     });
-    return '<section class="card"><h3>Absorción vs. Ruptura</h3>' +
-      '<table class="tbl cmp"><thead><tr><th></th><th class="abs">Absorción</th><th class="brk">Ruptura</th></tr></thead>' +
-      '<tbody>' + rows.join('') + '</tbody></table>' +
-      '<p class="hint">Resaltado = mejor de los dos. "Win rate mínimo" es el que necesitás para no perder con los R:R que usaste. ' +
+    return '<section class="card"><h3>Por tipo de entrada</h3>' +
+      '<table class="tbl cmp"><thead><tr><th></th>' +
+      TYPES.map(function (k) { return '<th class="' + k + '">' + TYPE_SHORT[k] + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows.join('') + '</tbody></table>' +
+      '<p class="hint">Resaltado = mejor de la fila. "Win rate mínimo" es el que necesitás para no perder con los R:R que usaste. ' +
       'Si los ± del win rate se superponen mucho, la diferencia todavía puede ser casualidad.</p></section>';
   }
 

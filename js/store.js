@@ -2,12 +2,14 @@
 (function (root) {
   'use strict';
 
+  // v4: nuevo tipo de entrada 'imbalance' (ruptura con imbalance). Clave nueva para que una versión vieja de la app
+  //     (que no conoce ese tipo) nunca lea estos datos y descarte esos trades.
   // v3: el punto de entrada pasa a ser multiselección (lista). v2 suma el punto de entrada; v1 es el original.
   // Al abrir se migra desde la versión más nueva que exista; las claves viejas quedan intactas como respaldo.
-  var KEY = 'orb-bt:v3';
-  var OLD_KEYS = ['orb-bt:v2', 'orb-bt:v1'];
-  var VERSION = 3;
-  var TYPES = ['absorcion', 'ruptura'];
+  var KEY = 'orb-bt:v4';
+  var OLD_KEYS = ['orb-bt:v3', 'orb-bt:v2', 'orb-bt:v1'];
+  var VERSION = 4;
+  var TYPES = ['absorcion', 'ruptura', 'imbalance'];
   var RRS = [1, 1.5, 2];
   var MFES = [0, 1, 1.5, 2, 3]; // 0 = menos de 1:1, 3 = más de 2:1
 
@@ -149,7 +151,7 @@
     exportJSON: function () {
       return JSON.stringify({ version: VERSION, exportedAt: new Date().toISOString(), trades: state.trades }, null, 2);
     },
-    // Mezcla por id: no duplica lo que ya está. Acepta exportaciones v1, v2 y v3.
+    // Mezcla por id: no duplica lo que ya está. Acepta exportaciones de cualquier versión.
     importJSON: function (text) {
       var d = JSON.parse(text);
       var list = Array.isArray(d) ? d : d.trades;

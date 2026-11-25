@@ -19,7 +19,7 @@ function loadStore(initial) {
 
 const v1Trade = { id: 'a1', date: '2026-01-05', type: 'absorcion', rr: 1, result: 'TP', mfe: 2, note: 'x', createdAt: 1 };
 
-test('migra v1 a v3 sin perder trades y deja v1 como respaldo', () => {
+test('migra v1 a la versión actual sin perder trades y deja v1 como respaldo', () => {
   const v1Raw = JSON.stringify({ version: 1, trades: [v1Trade], lastDate: '2026-01-05' });
   const { DB, data } = loadStore({ 'orb-bt:v1': v1Raw });
   const all = DB.all();
@@ -28,12 +28,12 @@ test('migra v1 a v3 sin perder trades y deja v1 como respaldo', () => {
   assert.deepStrictEqual(all[0].entry, []);
   assert.strictEqual(DB.getLastDate(), '2026-01-05');
   assert.strictEqual(data['orb-bt:v1'], v1Raw);
-  const v3 = JSON.parse(data['orb-bt:v3']);
-  assert.strictEqual(v3.version, 3);
-  assert.strictEqual(v3.trades.length, 1);
+  const cur = JSON.parse(data['orb-bt:v4']);
+  assert.strictEqual(cur.version, 4);
+  assert.strictEqual(cur.trades.length, 1);
 });
 
-test('migra v2 (entrada única) a v3 (lista) y deja v2 como respaldo', () => {
+test('migra v2 (entrada única) a lista y deja v2 como respaldo', () => {
   const v2Raw = JSON.stringify({ version: 2, lastDate: null, trades: [
     { ...v1Trade, id: 'b1', entry: 'ob' },
     { ...v1Trade, id: 'b2', entry: null },
@@ -47,13 +47,13 @@ test('migra v2 (entrada única) a v3 (lista) y deja v2 como respaldo', () => {
   assert.deepStrictEqual(byId.b2.entry, []);
   assert.deepStrictEqual(byId.b3.entry, []);
   assert.strictEqual(data['orb-bt:v2'], v2Raw);
-  assert.strictEqual(JSON.parse(data['orb-bt:v3']).trades.length, 3);
+  assert.strictEqual(JSON.parse(data['orb-bt:v4']).trades.length, 3);
 });
 
-test('si ya hay v3, no vuelve a leer las viejas', () => {
-  const v3Raw = JSON.stringify({ version: 3, trades: [], lastDate: null });
-  const v2Raw = JSON.stringify({ version: 2, trades: [v1Trade], lastDate: null });
-  const { DB } = loadStore({ 'orb-bt:v3': v3Raw, 'orb-bt:v2': v2Raw });
+test('si ya hay v4, no vuelve a leer las viejas', () => {
+  const v4Raw = JSON.stringify({ version: 4, trades: [], lastDate: null });
+  const v3Raw = JSON.stringify({ version: 3, trades: [v1Trade], lastDate: null });
+  const { DB } = loadStore({ 'orb-bt:v4': v4Raw, 'orb-bt:v3': v3Raw });
   assert.strictEqual(DB.all().length, 0);
 });
 
@@ -94,7 +94,7 @@ test('update edita un trade y mantiene id y createdAt', () => {
     ['2026-03-03', 'ruptura', 1.5, 'TP', 2, 'corregido', ['fvg', 'ob']]);
   assert.strictEqual(DB.all().length, 2);
   assert.strictEqual(DB.all().find(t => t.id === b.id).note, '');
-  const saved = JSON.parse(data['orb-bt:v3']).trades.find(t => t.id === a.id);
+  const saved = JSON.parse(data['orb-bt:v4']).trades.find(t => t.id === a.id);
   assert.strictEqual(saved.note, 'corregido');
 });
 
@@ -134,4 +134,26 @@ test('markBackup se guarda y sobrevive a reabrir la app', () => {
   const reopened = loadStore(data).DB;
   assert.strictEqual(reopened.backupStatus().due, false);
   assert.strictEqual(reopened.all().length, 5);
+});
+
+test('migra v3 a v4 sin tocar v3 (respaldo para versiones viejas de la app)', () => {
+  const v3Raw = JSON.stringify({ version: 3, lastDate: '2026-11-20', lastBackup: 123, trades: [{ ...v1Trade, entry: ['fvg', 'ob'] }] });
+  const { DB, data } = loadStore({ 'orb-bt:v3': v3Raw });
+  assert.deepStrictEqual(DB.all()[0].entry, ['fvg', 'ob']);
+  assert.strictEqual(DB.getLastDate(), '2026-11-20');
+  assert.strictEqual(DB.backupStatus().lastBackup, 123);
+  DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1, result: 'TP', mfe: 1 });
+  assert.strictEqual(data['orb-bt:v3'], v3Raw);
+  assert.strictEqual(JSON.parse(data['orb-bt:v4']).trades.length, 2);
+});
+
+test('acepta el tipo "imbalance" (ruptura con imbalance), también al editar e importar', () => {
+  const { DB } = loadStore({});
+  const t = DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1.5, result: 'TP', mfe: 2, entry: ['fvg'] });
+  assert.ok(t);
+  assert.strictEqual(t.type, 'imbalance');
+  const u = DB.update(t.id, { ...t, type: 'absorcion' });
+  assert.strictEqual(u.type, 'absorcion');
+  assert.strictEqual(DB.importJSON(JSON.stringify({ trades: [{ ...v1Trade, id: 'i1', type: 'imbalance' }] })), 1);
+  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'otro', rr: 1, result: 'TP', mfe: 1 }), null);
 });

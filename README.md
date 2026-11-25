@@ -1,12 +1,12 @@
 # ORB Backtest Log
 
-App simple para registrar y analizar a mano tus setups del ORB (primera vela de M15, 9:30–9:45 NY): **entrada por absorción** o **entrada por ruptura**. Funciona en el celu, sin internet, y guarda todo en el `localStorage` del dispositivo.
+App simple para registrar y analizar a mano tus setups del ORB (primera vela de M15, 9:30–9:45 NY): **entrada por absorción**, **entrada por ruptura** o **ruptura con imbalance**. Funciona en el celu, sin internet, y guarda todo en el `localStorage` del dispositivo.
 
 Sin dependencias ni build: HTML + CSS + JS puro.
 
 ## Flujo de registro
 
-1. Elegís la **fecha** y tocás **Entrada por absorción** o **Entrada por ruptura**.
+1. Elegís la **fecha** y tocás **Entrada por absorción**, **Entrada por ruptura** o **Ruptura con imbalance**.
 2. **R:R**: 1:1 por defecto (también 1.5:1 y 2:1).
 3. **¿Salió SL o Take?**
 4. **Máximo movimiento antes de llegar al nivel del SL**: menos de 1:1, 1:1, 1.5:1, 2:1 o más de 2:1. Las opciones imposibles quedan deshabilitadas (si salió Take, el movimiento fue al menos tu R:R; si salió SL, no llegó a tu objetivo).
@@ -15,10 +15,10 @@ Sin dependencias ni build: HTML + CSS + JS puro.
 
 ## Estadísticas
 
-Filtrables por tipo de entrada (todas / absorción / ruptura):
+Filtrables por tipo de entrada (todas / absorción / ruptura / imbalance):
 
 - Trades, win rate (con margen de error 95%), R neto, expectativa por trade, profit factor, drawdown máximo, rachas.
-- **Absorción vs. Ruptura** lado a lado (en "Todas"): trades, win rate con margen de error, win rate mínimo, R neto, expectativa, profit factor, drawdown, racha perdedora y TP ideal, con el mejor de cada fila resaltado.
+- **Por tipo de entrada**, los tres lado a lado (en "Todas"): trades, win rate con margen de error, win rate mínimo, R neto, expectativa, profit factor, drawdown, racha perdedora y TP ideal, con el mejor de cada fila resaltado.
 - Win rate real vs. el mínimo que necesitás según tus R:R.
 - Curva de capital en R.
 - **Take profit ideal**: para 1:1, 1.5:1 y 2:1, qué porcentaje de tus trades llegó al objetivo y qué expectativa daría cada uno.

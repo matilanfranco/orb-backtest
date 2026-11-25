@@ -9,6 +9,7 @@
   --blue: #5aa9ff;
   --purple: #b88cff;
   --amber: #f0b429;
+  --teal: #3ccfc0;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
@@ -57,6 +58,7 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .btn.big { min-height: 76px; font-size: 18px; }
 .btn.abs { border-color: var(--blue); background: rgba(90,169,255,.12); }
 .btn.brk { border-color: var(--purple); background: rgba(184,140,255,.12); }
+.btn.imb { border-color: var(--teal); background: rgba(60,207,192,.12); }
 .btn.tp { border-color: var(--green); background: rgba(76,195,138,.14); }
 .btn.sl { border-color: var(--red); background: rgba(239,91,91,.14); }
 .btn.primary { background: var(--blue); border-color: var(--blue); color: #08121e; }
@@ -109,6 +111,7 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .tag { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
 .tag.absorcion { color: var(--blue); border-color: var(--blue); }
 .tag.ruptura { color: var(--purple); border-color: var(--purple); }
+.tag.imbalance { color: var(--teal); border-color: var(--teal); }
 .badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
 .badge.tp { background: rgba(76,195,138,.18); color: var(--green); }
 .badge.sl { background: rgba(239,91,91,.18); color: var(--red); }
@@ -147,8 +150,11 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 
 /* absorción vs. ruptura */
 .tbl.cmp th[scope=row] { color: var(--muted); font-weight: 500; font-size: 13px; padding: 8px 4px; border-top: 1px solid var(--line); text-align: left; }
-.tbl.cmp th.abs { color: var(--blue); font-size: 13px; font-weight: 600; }
-.tbl.cmp th.brk { color: var(--purple); font-size: 13px; font-weight: 600; }
+.tbl.cmp thead th { font-size: 13px; font-weight: 600; }
+.tbl.cmp th.absorcion { color: var(--blue); }
+.tbl.cmp th.ruptura { color: var(--purple); }
+.tbl.cmp th.imbalance { color: var(--teal); }
+.tbl.cmp td { font-size: 13px; }
 .tbl.cmp td.better { font-weight: 700; background: rgba(76,195,138,.08); }
 
 /* edición */
