@@ -1,0 +1,10 @@
+{
+  "name": "orb-backtest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Registro y estadísticas de backtesting manual del ORB (PWA offline, sin build)",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test"
+  }
+}
