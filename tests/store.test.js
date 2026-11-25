@@ -140,20 +140,26 @@ test('migra v3 a v4 sin tocar v3 (respaldo para versiones viejas de la app)', ()
   const v3Raw = JSON.stringify({ version: 3, lastDate: '2026-11-20', lastBackup: 123, trades: [{ ...v1Trade, entry: ['fvg', 'ob'] }] });
   const { DB, data } = loadStore({ 'orb-bt:v3': v3Raw });
   assert.deepStrictEqual(DB.all()[0].entry, ['fvg', 'ob']);
+  assert.strictEqual(DB.all()[0].fvgFormed, null);
   assert.strictEqual(DB.getLastDate(), '2026-11-20');
   assert.strictEqual(DB.backupStatus().lastBackup, 123);
-  DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1, result: 'TP', mfe: 1 });
+  DB.add({ date: '2026-11-25', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, fvgFormed: true });
   assert.strictEqual(data['orb-bt:v3'], v3Raw);
   assert.strictEqual(JSON.parse(data['orb-bt:v4']).trades.length, 2);
 });
 
-test('acepta el tipo "imbalance" (ruptura con imbalance), también al editar e importar', () => {
+test('guarda "¿se formó FVG?" (sí / no / sin dato), también al editar e importar', () => {
   const { DB } = loadStore({});
-  const t = DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1.5, result: 'TP', mfe: 2, entry: ['fvg'] });
-  assert.ok(t);
-  assert.strictEqual(t.type, 'imbalance');
-  const u = DB.update(t.id, { ...t, type: 'absorcion' });
-  assert.strictEqual(u.type, 'absorcion');
-  assert.strictEqual(DB.importJSON(JSON.stringify({ trades: [{ ...v1Trade, id: 'i1', type: 'imbalance' }] })), 1);
-  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'otro', rr: 1, result: 'TP', mfe: 1 }), null);
+  const t = DB.add({ date: '2026-11-25', type: 'absorcion', rr: 1, result: 'TP', mfe: 2, fvgFormed: true });
+  assert.strictEqual(t.fvgFormed, true);
+  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'ruptura', rr: 1, result: 'SL', mfe: 0, fvgFormed: false }).fvgFormed, false);
+  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'ruptura', rr: 1, result: 'SL', mfe: 0 }).fvgFormed, null);
+  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'ruptura', rr: 1, result: 'SL', mfe: 0, fvgFormed: 'si' }).fvgFormed, null);
+  assert.strictEqual(DB.update(t.id, { ...t, fvgFormed: false }).fvgFormed, false);
+  assert.strictEqual(DB.update(t.id, { ...t, fvgFormed: null }).fvgFormed, null);
+  DB.importJSON(JSON.stringify({ trades: [{ ...v1Trade, id: 'i1', fvgFormed: true }, { ...v1Trade, id: 'i2' }] }));
+  const byId = Object.fromEntries(DB.all().map(x => [x.id, x]));
+  assert.strictEqual(byId.i1.fvgFormed, true);
+  assert.strictEqual(byId.i2.fvgFormed, null);
+  assert.strictEqual(DB.add({ date: '2026-11-25', type: 'imbalance', rr: 1, result: 'TP', mfe: 1 }), null); // ya no es un tipo
 });

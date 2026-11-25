@@ -2,14 +2,14 @@
 (function (root) {
   'use strict';
 
-  // v4: nuevo tipo de entrada 'imbalance' (ruptura con imbalance). Clave nueva para que una versión vieja de la app
-  //     (que no conoce ese tipo) nunca lea estos datos y descarte esos trades.
+  // v4: suma fvgFormed (¿se formó FVG? true/false/null). Clave nueva para que una versión vieja de la app
+  //     nunca lea ni pise datos con este campo.
   // v3: el punto de entrada pasa a ser multiselección (lista). v2 suma el punto de entrada; v1 es el original.
   // Al abrir se migra desde la versión más nueva que exista; las claves viejas quedan intactas como respaldo.
   var KEY = 'orb-bt:v4';
   var OLD_KEYS = ['orb-bt:v3', 'orb-bt:v2', 'orb-bt:v1'];
   var VERSION = 4;
-  var TYPES = ['absorcion', 'ruptura', 'imbalance'];
+  var TYPES = ['absorcion', 'ruptura'];
   var RRS = [1, 1.5, 2];
   var MFES = [0, 1, 1.5, 2, 3]; // 0 = menos de 1:1, 3 = más de 2:1
 
@@ -28,7 +28,8 @@
       (t.result === 'TP' || t.result === 'SL') &&
       MFES.indexOf(t.mfe) !== -1 &&
       typeof t.createdAt === 'number' &&
-      validEntry(t.entry);
+      validEntry(t.entry) &&
+      (t.fvgFormed === null || t.fvgFormed === true || t.fvgFormed === false);
   }
 
   // v2 guardaba un valor suelto o null; v3 guarda una lista sin repetidos, en el orden de ENTRIES.
@@ -43,7 +44,8 @@
     return {
       id: t.id, date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
       note: typeof t.note === 'string' ? t.note.slice(0, 500) : '', createdAt: t.createdAt,
-      entry: normalizeEntry(t.entry)
+      entry: normalizeEntry(t.entry),
+      fvgFormed: t.fvgFormed === true || t.fvgFormed === false ? t.fvgFormed : null
     };
   }
 
@@ -121,7 +123,7 @@
       var trade = normalize({
         id: uid(), date: t.date, type: t.type, rr: t.rr, result: t.result,
         mfe: t.mfe, note: t.note || '', createdAt: Date.now(),
-        entry: t.entry
+        entry: t.entry, fvgFormed: t.fvgFormed
       });
       if (!valid(trade)) return null;
       state.trades.push(trade);
@@ -135,7 +137,7 @@
       var old = state.trades[i];
       var trade = normalize({
         id: old.id, date: t.date, type: t.type, rr: t.rr, result: t.result,
-        mfe: t.mfe, note: t.note || '', createdAt: old.createdAt, entry: t.entry
+        mfe: t.mfe, note: t.note || '', createdAt: old.createdAt, entry: t.entry, fvgFormed: t.fvgFormed
       });
       if (!valid(trade)) return null;
       state.trades[i] = trade;

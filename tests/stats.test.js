@@ -109,3 +109,15 @@ test('groupByTags: un trade con varios puntos de entrada cuenta en cada grupo', 
   assert.strictEqual(g.groups.fvg.ideal.best, 1.5);
   assert.strictEqual(g.groups.ob.summary.netR, 0); // +1 y -1
 });
+
+test('groupBy con "¿se formó FVG?" (booleano) separa sí y no', () => {
+  const t = [
+    { ...mk('2026-05-01', 'absorcion', 1, 'TP', 2, 1), fvgFormed: true },
+    { ...mk('2026-05-02', 'ruptura', 1, 'TP', 1.5, 2), fvgFormed: true },
+    { ...mk('2026-05-03', 'absorcion', 1, 'SL', 0, 3), fvgFormed: false }
+  ];
+  const g = S.groupBy(t, x => x.fvgFormed);
+  assert.strictEqual(g.true.summary.n, 2);
+  assert.strictEqual(g.true.ideal.best, 1.5);
+  assert.strictEqual(g.false.summary.n, 1);
+});

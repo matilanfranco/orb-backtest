@@ -3,14 +3,17 @@
   'use strict';
 
   // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
-  var APP_VERSION = '2026-11-25.3';
+  var APP_VERSION = '2026-11-25.4';
 
   var S = window.BTStats;
   var DB = window.BTStore;
 
-  var TYPES = ['absorcion', 'ruptura', 'imbalance'];
-  var TYPE_LABEL = { absorcion: 'Absorción', ruptura: 'Ruptura', imbalance: 'Ruptura con imbalance' };
-  var TYPE_SHORT = { absorcion: 'Absorción', ruptura: 'Ruptura', imbalance: 'Imbalance' };
+  var TYPES = ['absorcion', 'ruptura'];
+  var TYPE_LABEL = { absorcion: 'Absorción', ruptura: 'Ruptura' };
+  var TYPE_SHORT = TYPE_LABEL;
+  // ¿Se formó FVG? (sí / no / sin dato). Aplica a los dos tipos de entrada.
+  var FVGF_OPTS = [['si', 'Sí', true], ['no', 'No', false]];
+  function fvgfLabel(v) { return v === true ? 'FVG formado' : (v === false ? 'Sin FVG' : ''); }
   var RR_OPTS = [1, 1.5, 2];
   var MFE_OPTS = [
     { v: 0, label: 'Menos de 1:1', short: '<1' },
@@ -36,7 +39,7 @@
 
   /* ---------- helpers ---------- */
   function newDraft() {
-    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: [] };
+    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: [], fvgFormed: null };
   }
   function pad(n) { return String(n).padStart(2, '0'); }
   function todayStr() {
@@ -104,7 +107,6 @@
         '<section class="stack">' +
           '<button class="btn big abs" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
           '<button class="btn big brk" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
-          '<button class="btn big imb" data-action="type" data-v="imbalance">Ruptura con imbalance</button>' +
         '</section>';
     }
 
@@ -162,6 +164,13 @@
             var on = d.entry.indexOf(o[0]) !== -1;
             return '<button class="chip' + (on ? ' sel' : '') + '" aria-pressed="' + on + '" data-action="entry" data-v="' + o[0] + '">' +
               (on ? '✓ ' : '') + o[1] + '</button>';
+          }).join('') +
+        '</div>' +
+        '<p class="lbl">¿Se formó FVG? <span class="hint">· opcional, tocá de nuevo para quitar</span></p>' +
+        '<div class="chips ctx">' +
+          FVGF_OPTS.map(function (o) {
+            var on = d.fvgFormed === o[2];
+            return '<button class="chip' + (on ? ' sel' : '') + '" aria-pressed="' + on + '" data-action="fvgf" data-v="' + o[0] + '">' + o[1] + '</button>';
           }).join('') +
         '</div>' +
         '<label class="lbl" for="note">Descripción (opcional)</label>' +
@@ -311,15 +320,27 @@
       'Si los ± del win rate se superponen mucho, la diferencia todavía puede ser casualidad.</p></section>';
   }
 
-  // Expectativa de cada objetivo (1, 1.5, 2) por punto de entrada.
+  // Expectativa de cada objetivo (1, 1.5, 2) por punto de entrada y por "¿se formó FVG?".
   function contextSection(trades) {
-    var title = '<section class="card"><h3>Take profit ideal por punto de entrada</h3>';
     var g = S.groupByTags(trades, 'entry');
+    var html = tpTable('Take profit ideal por punto de entrada', g, ENTRY_OPTS, 'sin punto de entrada marcado',
+      'Todavía no marcaste el punto de entrada en ningún trade.',
+      'Si un trade tiene varios puntos marcados, cuenta en cada uno. ');
+    var withF = trades.filter(function (t) { return t.fvgFormed === true || t.fvgFormed === false; });
+    var gf = { groups: S.groupBy(withF, function (t) { return t.fvgFormed; }), withData: withF.length, missing: trades.length - withF.length };
+    html += tpTable('Take profit ideal: ¿se formó FVG?', gf, [['true', 'Sí'], ['false', 'No']], 'sin marcar',
+      'Todavía no marcaste "¿Se formó FVG?" en ningún trade.', '');
+    return html;
+  }
+
+  // Tabla de expectativa por objetivo para cada grupo. opts: [[clave, etiqueta]].
+  function tpTable(titleText, g, opts, missingText, emptyText, extraHint) {
+    var title = '<section class="card"><h3>' + titleText + '</h3>';
     if (!g.withData) {
-      return title + '<p class="hint">Todavía no marcaste el punto de entrada en ningún trade. ' +
-        'Se marca (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
+      return title + '<p class="hint">' + emptyText + ' Se marca (opcional) al registrar, en la pantalla del máximo movimiento, ' +
+        'o editando el trade en el historial.</p></section>';
     }
-    var rows = ENTRY_OPTS.filter(function (o) { return g.groups[o[0]]; }).map(function (o) {
+    var rows = opts.filter(function (o) { return g.groups[o[0]]; }).map(function (o) {
       var grp = g.groups[o[0]];
       var best = grp.ideal.best;
       return '<tr' + (grp.summary.n < 10 ? ' class="low"' : '') + '><td>' + o[1] + '</td><td>' + grp.summary.n + '</td>' +
@@ -330,12 +351,12 @@
         }).join('') + '</tr>';
     });
     return title +
-      (g.missing ? '<p class="hint">' + g.missing + ' trade' + (g.missing === 1 ? '' : 's') + ' sin punto de entrada marcado</p>' : '') +
+      (g.missing ? '<p class="hint">' + g.missing + ' trade' + (g.missing === 1 ? '' : 's') + ' ' + missingText + '</p>' : '') +
       '<table class="tbl"><thead><tr><th></th><th>N</th>' +
       S.TARGETS.map(function (T) { return '<th>' + rrLabel(T) + '</th>'; }).join('') +
       '</tr></thead><tbody>' + rows.join('') + '</tbody></table>' +
       '<p class="hint">Expectativa en R por trade con cada objetivo. ★ = mejor objetivo del grupo. ' +
-      'Si un trade tiene varios puntos marcados, cuenta en cada uno. ' +
+      extraHint +
       'Los grupos con menos de 10 trades se ven atenuados: todavía no son confiables.</p></section>';
   }
 
@@ -377,7 +398,8 @@
         '<div class="top"><span class="date">' + esc(t.date) + '</span>' +
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
-        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (entryLabel(t.entry) ? ' · Entrada en ' + esc(entryLabel(t.entry)) : '') + '</div>' +
+        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (entryLabel(t.entry) ? ' · Entrada en ' + esc(entryLabel(t.entry)) : '') +
+          (fvgfLabel(t.fvgFormed) ? ' · ' + fvgfLabel(t.fvgFormed) : '') + '</div>' +
         (t.note ? '<div class="sub ctx">' + esc(t.note) + '</div>' : '') +
         '<div class="acts">' +
           '<button class="edit" aria-label="Editar trade" data-action="edit" data-id="' + esc(t.id) + '">Editar</button>' +
@@ -410,6 +432,7 @@
         (d.mfe === null ? '<p class="need">Elegí hasta dónde llegó</p>' : '')) +
       row('Entrada', chips('entry', ENTRY_OPTS.map(function (o) { return [o[0], o[1] === 'Borde del rango' ? 'Borde' : o[1]]; }),
         function (v) { return d.entry.indexOf(v) !== -1; })) +
+      row('¿Se formó FVG?', chips('fvgFormed', FVGF_OPTS, function (v) { return fvgfValue(v) === d.fvgFormed; })) +
       '<textarea id="enote" class="input area mini" maxlength="500" rows="2" placeholder="Descripción (opcional)">' + esc(d.note) + '</textarea>' +
       '<div class="row erow-btns">' +
         '<button class="btn ghost" data-action="hcancel">Cancelar</button>' +
@@ -453,14 +476,16 @@
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
-    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'descripcion']];
+    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'fvg_formado', 'descripcion']];
     S.sortTrades(DB.all()).forEach(function (t) {
-      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, (t.entry || []).join('+'), t.note || '']);
+      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, (t.entry || []).join('+'),
+        t.fvgFormed === true ? 'si' : (t.fvgFormed === false ? 'no' : ''), t.note || '']);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
   }
 
   /* ---------- acciones ---------- */
+  function fvgfValue(code) { return code === 'si' ? true : (code === 'no' ? false : null); }
   function hDirty() { return ui.hEdit && JSON.stringify(ui.hEdit.d) !== ui.hEdit.orig; }
   // Muestra la tarjeta en pantalla si quedó fuera (al abrir o cerrar un editor).
   function revealItem(id) {
@@ -498,12 +523,17 @@
       render();
       window.scrollTo(0, y);
     },
+    fvgf: function (el) {
+      var v = fvgfValue(el.dataset.v);
+      ui.draft.fvgFormed = ui.draft.fvgFormed === v ? null : v;
+      render(true);
+    },
     save: function () {
       var d = ui.draft;
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
       var data = {
         date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
-        entry: d.entry
+        entry: d.entry, fvgFormed: d.fvgFormed
       };
       var t = DB.add(data);
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
@@ -518,7 +548,7 @@
       var t = DB.all().filter(function (x) { return x.id === el.dataset.id; })[0];
       if (!t) return;
       if (hDirty() && !confirm('Tenés cambios sin guardar en otro trade. ¿Descartarlos?')) return;
-      var d = { date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice() };
+      var d = { date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice(), fvgFormed: t.fvgFormed === undefined ? null : t.fvgFormed };
       ui.hEdit = { id: t.id, d: d, orig: JSON.stringify(d) };
       render(true);
       revealItem(t.id);
@@ -531,6 +561,9 @@
       if (f === 'entry') {
         var next = d.entry.indexOf(v) === -1 ? d.entry.concat([v]) : d.entry.filter(function (x) { return x !== v; });
         d.entry = ENTRY_OPTS.map(function (o) { return o[0]; }).filter(function (x) { return next.indexOf(x) !== -1; });
+      } else if (f === 'fvgFormed') {
+        v = fvgfValue(v);
+        d.fvgFormed = d.fvgFormed === v ? null : v; // tocar de nuevo lo quita
       } else {
         d[f] = v;
       }

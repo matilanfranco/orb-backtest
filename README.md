@@ -1,31 +1,32 @@
 # ORB Backtest Log
 
-App simple para registrar y analizar a mano tus setups del ORB (primera vela de M15, 9:30–9:45 NY): **entrada por absorción**, **entrada por ruptura** o **ruptura con imbalance**. Funciona en el celu, sin internet, y guarda todo en el `localStorage` del dispositivo.
+App simple para registrar y analizar a mano tus setups del ORB (primera vela de M15, 9:30–9:45 NY): **entrada por absorción** o **entrada por ruptura**. Funciona en el celu, sin internet, y guarda todo en el `localStorage` del dispositivo.
 
 Sin dependencias ni build: HTML + CSS + JS puro.
 
 ## Flujo de registro
 
-1. Elegís la **fecha** y tocás **Entrada por absorción**, **Entrada por ruptura** o **Ruptura con imbalance**.
+1. Elegís la **fecha** y tocás **Entrada por absorción** o **Entrada por ruptura**.
 2. **R:R**: 1:1 por defecto (también 1.5:1 y 2:1).
 3. **¿Salió SL o Take?**
 4. **Máximo movimiento antes de llegar al nivel del SL**: menos de 1:1, 1:1, 1.5:1, 2:1 o más de 2:1. Las opciones imposibles quedan deshabilitadas (si salió Take, el movimiento fue al menos tu R:R; si salió SL, no llegó a tu objetivo).
-5. **Punto de entrada (opcional)**, en la misma pantalla: **FVG**, **OB** y/o **Borde del rango**. Podés marcar varios; tocá de nuevo para desmarcar. Abajo hay un cuadro de **descripción** libre (opcional).
+5. **Punto de entrada (opcional)**, en la misma pantalla: **FVG**, **OB** y/o **Borde del rango**. Podés marcar varios; tocá de nuevo para desmarcar. Después, **¿Se formó FVG?** Sí / No (opcional, sirve para absorción y ruptura). Abajo hay un cuadro de **descripción** libre (opcional).
 6. **Guardar**. La fecha queda seleccionada para cargar varios trades del mismo día.
 
 **Editar un trade:** Historial → *Editar*. La tarjeta se abre ahí mismo con todo en versión compacta (fecha, tipo, R:R, resultado, máximo movimiento, punto de entrada, descripción). *Guardar* la cierra en el mismo lugar, así pasás directo al siguiente. Si abrís otro con cambios sin guardar, te pregunta antes de descartarlos.
 
 ## Estadísticas
 
-Filtrables por tipo de entrada (todas / absorción / ruptura / imbalance):
+Filtrables por tipo de entrada (todas / absorción / ruptura):
 
 - Trades, win rate (con margen de error 95%), R neto, expectativa por trade, profit factor, drawdown máximo, rachas.
-- **Por tipo de entrada**, los tres lado a lado (en "Todas"): trades, win rate con margen de error, win rate mínimo, R neto, expectativa, profit factor, drawdown, racha perdedora y TP ideal, con el mejor de cada fila resaltado.
+- **Por tipo de entrada**, los dos lado a lado (en "Todas"): trades, win rate con margen de error, win rate mínimo, R neto, expectativa, profit factor, drawdown, racha perdedora y TP ideal, con el mejor de cada fila resaltado.
 - Win rate real vs. el mínimo que necesitás según tus R:R.
 - Curva de capital en R.
 - **Take profit ideal**: para 1:1, 1.5:1 y 2:1, qué porcentaje de tus trades llegó al objetivo y qué expectativa daría cada uno.
 - Distribución del máximo movimiento.
 - **Take profit ideal por punto de entrada**: para FVG, OB y borde del rango, la expectativa con 1:1, 1.5:1 y 2:1. Si un trade tiene varios marcados, cuenta en cada grupo. Los grupos con menos de 10 trades se ven atenuados.
+- **Take profit ideal: ¿se formó FVG?**: lo mismo, separando los trades donde se formó FVG de los que no. Respeta el filtro de arriba (ej. solo absorción).
 - Desglose por R:R elegido y por día de la semana.
 
 **Supuesto del take profit ideal:** un trade "gana" con objetivo T si su máximo movimiento llegó a T; si no llegó, se asume pérdida de 1R. Con menos de ~30 trades la app avisa que la muestra es chica.
