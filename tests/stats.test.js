@@ -92,19 +92,20 @@ test('orden por fecha y luego por creación', () => {
   assert.deepStrictEqual(ids, ['1', '2', '3', '4']);
 });
 
-test('groupByField: agrupa por punto de entrada y cuenta los sin dato', () => {
+test('groupByTags: un trade con varios puntos de entrada cuenta en cada grupo', () => {
   const t = [
-    { ...mk('2026-04-01', 'ruptura', 1, 'TP', 2, 1), entry: 'fvg' },
-    { ...mk('2026-04-02', 'ruptura', 1, 'TP', 1.5, 2), entry: 'fvg' },
-    { ...mk('2026-04-03', 'ruptura', 1, 'SL', 0, 3), entry: 'ob' },
-    { ...mk('2026-04-04', 'ruptura', 1, 'TP', 1, 4), entry: null },
-    mk('2026-04-05', 'ruptura', 1, 'SL', 0, 5) // trade viejo, sin el campo
+    { ...mk('2026-04-01', 'ruptura', 1, 'TP', 2, 1), entry: ['fvg'] },
+    { ...mk('2026-04-02', 'ruptura', 1, 'TP', 1.5, 2), entry: ['fvg', 'ob'] },
+    { ...mk('2026-04-03', 'ruptura', 1, 'SL', 0, 3), entry: ['ob'] },
+    { ...mk('2026-04-04', 'ruptura', 1, 'TP', 1, 4), entry: [] },
+    mk('2026-04-05', 'ruptura', 1, 'SL', 0, 5) // sin el campo
   ];
-  const g = S.groupByField(t, 'entry');
+  const g = S.groupByTags(t, 'entry');
   assert.strictEqual(g.withData, 3);
   assert.strictEqual(g.missing, 2);
   assert.deepStrictEqual(Object.keys(g.groups).sort(), ['fvg', 'ob']);
   assert.strictEqual(g.groups.fvg.summary.n, 2);
+  assert.strictEqual(g.groups.ob.summary.n, 2);
   assert.strictEqual(g.groups.fvg.ideal.best, 1.5);
-  assert.strictEqual(g.groups.ob.ideal.best, 1);
+  assert.strictEqual(g.groups.ob.summary.netR, 0); // +1 y -1
 });

@@ -101,14 +101,21 @@
     return out;
   }
 
-  // Agrupa por un campo de contexto (rango, espacio, vela, noticias) y deja aparte los trades sin dato.
-  function groupByField(trades, field) {
-    var withData = trades.filter(function (t) { return t[field] !== null && t[field] !== undefined; });
-    return {
-      groups: groupBy(withData, function (t) { return t[field]; }),
-      withData: withData.length,
-      missing: trades.length - withData.length
-    };
+  // Agrupa por un campo que es una lista de etiquetas (ej. punto de entrada ['fvg', 'ob']).
+  // Un trade con varias etiquetas cuenta en cada uno de sus grupos; los que tienen la lista vacía quedan aparte.
+  function groupByTags(trades, field) {
+    var lists = {};
+    var withData = 0;
+    trades.forEach(function (t) {
+      var tags = Array.isArray(t[field]) ? t[field] : [];
+      if (tags.length) withData++;
+      tags.forEach(function (tag) { (lists[tag] = lists[tag] || []).push(t); });
+    });
+    var groups = {};
+    Object.keys(lists).forEach(function (k) {
+      groups[k] = { summary: summarize(lists[k]), ideal: idealTargets(lists[k]) };
+    });
+    return { groups: groups, withData: withData, missing: trades.length - withData };
   }
 
   var api = {
@@ -119,7 +126,7 @@
     idealTargets: idealTargets,
     mfeDistribution: mfeDistribution,
     groupBy: groupBy,
-    groupByField: groupByField
+    groupByTags: groupByTags
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

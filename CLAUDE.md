@@ -10,7 +10,7 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
 
 ## Reglas del proyecto
 - **Sin build ni dependencias**: HTML/CSS/JS puro con `<script>` clásicos (no módulos ES, para que también abra desde `file://`).
-- **Offline primero**: todo en `localStorage` (clave `orb-bt:v1`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js`.
+- **Offline primero**: todo en `localStorage` (clave `orb-bt:v3`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js`.
 - UI en **español**, pensada para celu (botones grandes, una mano). Mantener simple el flujo de registro: pocas pantallas, pocos toques.
 - La lógica de estadísticas vive en `js/stats.js` como funciones puras y se prueba con `npm test` (node:test). La migración/importación de `js/store.js` se prueba en `tests/store.test.js` con un localStorage falso. Cualquier cambio de cálculo lleva su test.
 - Los datos del usuario no se pueden romper: si cambia el formato guardado, subir la versión de la clave y migrar; mantener Exportar/Importar JSON.
@@ -22,9 +22,10 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
   mfe: 0 | 1 | 1.5 | 2 | 3,   // máximo movimiento a favor antes de volver al SL: 0 = <1R, 3 = >2R
   note: string,            // descripción libre, hasta 500 caracteres
   createdAt: number,
-  entry: 'fvg' | 'ob' | 'borde' | null }  // punto de entrada (v2, opcional): FVG, order block o borde del rango
+  entry: Array<'fvg' | 'ob' | 'borde'> }  // punto de entrada, multiselección (puede quedar vacía), sin repetidos y en ese orden
 ```
-- Guardado en `orb-bt:v2`. Al abrir, si no existe, se migra desde `orb-bt:v1` (que queda intacta como respaldo). `normalize()` en `js/store.js` lleva cualquier trade v1/v2 al formato actual; Importar acepta ambos.
+- Guardado en `orb-bt:v3`. Al abrir, si no existe, se migra desde `orb-bt:v2` o `orb-bt:v1` (las viejas quedan intactas como respaldo). v2 guardaba `entry` como valor único o null; v3 lo pasa a lista. `normalize()` en `js/store.js` lleva cualquier trade v1/v2/v3 al formato actual; Importar acepta todos.
+- Estadísticas por punto de entrada con `groupByTags`: un trade con varias marcas cuenta en cada grupo.
 - R real del trade: `TP → +rr`, `SL → −1`.
 - Validaciones de consistencia en la UI: con TP, `mfe >= rr`; con SL, `mfe < rr`.
 - "Take profit ideal": con objetivo T, el trade gana si `mfe >= T`, si no, se asume −1R.
@@ -35,7 +36,7 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
 - El service worker solo corre en https o localhost; para probar offline: cargar en localhost, esperar un segundo y desactivar la red en DevTools.
 
 ## Ideas para seguir (por orden de valor)
-1. ~~Punto de entrada~~ (hecho en v2: FVG / OB / borde del rango, con tabla de TP ideal por punto de entrada). A Mati **no** le interesan campos como rango vs ATR, PDH/PDL, Asia/Londres o noticias: no proponerlos.
+1. ~~Punto de entrada~~ (hecho: FVG / OB / borde del rango, multiselección desde v3, con tabla de TP ideal por punto de entrada). A Mati **no** le interesan campos como rango vs ATR, PDH/PDL, Asia/Londres o noticias: no proponerlos.
 2. ~~Editar un trade existente desde el historial~~ (hecho: botón Editar → `DB.update`, mantiene id y createdAt).
 3. Filtro por rango de fechas en Estadísticas.
 4. MFE exacto en R (número libre) en vez de categorías, para ver el TP ideal con más resolución.

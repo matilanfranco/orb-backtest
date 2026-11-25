@@ -19,37 +19,53 @@ function loadStore(initial) {
 
 const v1Trade = { id: 'a1', date: '2026-01-05', type: 'absorcion', rr: 1, result: 'TP', mfe: 2, note: 'x', createdAt: 1 };
 
-test('migra v1 a v2 sin perder trades y deja v1 como respaldo', () => {
+test('migra v1 a v3 sin perder trades y deja v1 como respaldo', () => {
   const v1Raw = JSON.stringify({ version: 1, trades: [v1Trade], lastDate: '2026-01-05' });
   const { DB, data } = loadStore({ 'orb-bt:v1': v1Raw });
   const all = DB.all();
   assert.strictEqual(all.length, 1);
   assert.strictEqual(all[0].id, 'a1');
-  assert.strictEqual(all[0].entry, null);
+  assert.deepStrictEqual(all[0].entry, []);
   assert.strictEqual(DB.getLastDate(), '2026-01-05');
   assert.strictEqual(data['orb-bt:v1'], v1Raw);
-  const v2 = JSON.parse(data['orb-bt:v2']);
-  assert.strictEqual(v2.version, 2);
-  assert.strictEqual(v2.trades.length, 1);
+  const v3 = JSON.parse(data['orb-bt:v3']);
+  assert.strictEqual(v3.version, 3);
+  assert.strictEqual(v3.trades.length, 1);
 });
 
-test('si ya hay v2, no vuelve a leer v1', () => {
-  const v2Raw = JSON.stringify({ version: 2, trades: [], lastDate: null });
+test('migra v2 (entrada única) a v3 (lista) y deja v2 como respaldo', () => {
+  const v2Raw = JSON.stringify({ version: 2, lastDate: null, trades: [
+    { ...v1Trade, id: 'b1', entry: 'ob' },
+    { ...v1Trade, id: 'b2', entry: null },
+    { ...v1Trade, id: 'b3', entry: 'otra' }
+  ] });
   const v1Raw = JSON.stringify({ version: 1, trades: [v1Trade], lastDate: null });
-  const { DB } = loadStore({ 'orb-bt:v2': v2Raw, 'orb-bt:v1': v1Raw });
+  const { DB, data } = loadStore({ 'orb-bt:v2': v2Raw, 'orb-bt:v1': v1Raw });
+  const byId = Object.fromEntries(DB.all().map(t => [t.id, t]));
+  assert.deepStrictEqual(Object.keys(byId).sort(), ['b1', 'b2', 'b3']); // lee v2, no v1
+  assert.deepStrictEqual(byId.b1.entry, ['ob']);
+  assert.deepStrictEqual(byId.b2.entry, []);
+  assert.deepStrictEqual(byId.b3.entry, []);
+  assert.strictEqual(data['orb-bt:v2'], v2Raw);
+  assert.strictEqual(JSON.parse(data['orb-bt:v3']).trades.length, 3);
+});
+
+test('si ya hay v3, no vuelve a leer las viejas', () => {
+  const v3Raw = JSON.stringify({ version: 3, trades: [], lastDate: null });
+  const v2Raw = JSON.stringify({ version: 2, trades: [v1Trade], lastDate: null });
+  const { DB } = loadStore({ 'orb-bt:v3': v3Raw, 'orb-bt:v2': v2Raw });
   assert.strictEqual(DB.all().length, 0);
 });
 
-test('add guarda el punto de entrada y descarta valores raros', () => {
+test('add guarda varios puntos de entrada, sin repetidos y en orden fijo', () => {
   const { DB } = loadStore({});
-  for (const e of ['fvg', 'ob', 'borde']) {
-    const t = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1.5, result: 'SL', mfe: 1, note: '', entry: e });
-    assert.ok(t);
-    assert.strictEqual(t.entry, e);
-  }
-  const u = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, entry: 'otra' });
-  assert.ok(u);
-  assert.strictEqual(u.entry, null);
+  const t = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1.5, result: 'SL', mfe: 1, note: '', entry: ['borde', 'fvg', 'borde'] });
+  assert.ok(t);
+  assert.deepStrictEqual(t.entry, ['fvg', 'borde']);
+  const u = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, entry: ['otra', 'ob'] });
+  assert.deepStrictEqual(u.entry, ['ob']);
+  const w = DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1 });
+  assert.deepStrictEqual(w.entry, []);
 });
 
 test('la descripción se guarda hasta 500 caracteres', () => {
@@ -63,22 +79,22 @@ test('importa exportaciones v1 y no duplica', () => {
   const file = JSON.stringify({ version: 1, trades: [v1Trade] });
   assert.strictEqual(DB.importJSON(file), 1);
   assert.strictEqual(DB.importJSON(file), 0);
-  assert.strictEqual(DB.all()[0].entry, null);
+  assert.deepStrictEqual(DB.all()[0].entry, []);
 });
 
 test('update edita un trade y mantiene id y createdAt', () => {
   const { DB, data } = loadStore({});
   const a = DB.add({ date: '2026-03-01', type: 'absorcion', rr: 1, result: 'SL', mfe: 0, note: '' });
   const b = DB.add({ date: '2026-03-02', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, note: '' });
-  const u = DB.update(a.id, { date: '2026-03-03', type: 'ruptura', rr: 1.5, result: 'TP', mfe: 2, note: 'corregido', entry: 'ob' });
+  const u = DB.update(a.id, { date: '2026-03-03', type: 'ruptura', rr: 1.5, result: 'TP', mfe: 2, note: 'corregido', entry: ['ob', 'fvg'] });
   assert.ok(u);
   assert.strictEqual(u.id, a.id);
   assert.strictEqual(u.createdAt, a.createdAt);
   assert.deepStrictEqual([u.date, u.type, u.rr, u.result, u.mfe, u.note, u.entry],
-    ['2026-03-03', 'ruptura', 1.5, 'TP', 2, 'corregido', 'ob']);
+    ['2026-03-03', 'ruptura', 1.5, 'TP', 2, 'corregido', ['fvg', 'ob']]);
   assert.strictEqual(DB.all().length, 2);
   assert.strictEqual(DB.all().find(t => t.id === b.id).note, '');
-  const saved = JSON.parse(data['orb-bt:v2']).trades.find(t => t.id === a.id);
+  const saved = JSON.parse(data['orb-bt:v3']).trades.find(t => t.id === a.id);
   assert.strictEqual(saved.note, 'corregido');
 });
 

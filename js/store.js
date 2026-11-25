@@ -2,19 +2,21 @@
 (function (root) {
   'use strict';
 
-  // v2 suma el punto de entrada (opcional). v1 se migra al abrir y queda intacta como respaldo.
-  var KEY = 'orb-bt:v2';
-  var OLD_KEY = 'orb-bt:v1';
-  var VERSION = 2;
+  // v3: el punto de entrada pasa a ser multiselección (lista). v2 suma el punto de entrada; v1 es el original.
+  // Al abrir se migra desde la versión más nueva que exista; las claves viejas quedan intactas como respaldo.
+  var KEY = 'orb-bt:v3';
+  var OLD_KEYS = ['orb-bt:v2', 'orb-bt:v1'];
+  var VERSION = 3;
   var TYPES = ['absorcion', 'ruptura'];
   var RRS = [1, 1.5, 2];
   var MFES = [0, 1, 1.5, 2, 3]; // 0 = menos de 1:1, 3 = más de 2:1
 
-  // Contexto del setup. null = no se cargó.
-  var CTX = {
-    entry: ['fvg', 'ob', 'borde'] // punto de entrada: FVG, order block o borde del rango
-  };
-  var CTX_KEYS = Object.keys(CTX);
+  // Punto de entrada (multiselección, puede quedar vacío): FVG, order block, borde del rango.
+  var ENTRIES = ['fvg', 'ob', 'borde'];
+
+  function validEntry(e) {
+    return Array.isArray(e) && e.every(function (x, i) { return ENTRIES.indexOf(x) !== -1 && e.indexOf(x) === i; });
+  }
 
   function valid(t) {
     return t && typeof t.id === 'string' &&
@@ -24,18 +26,23 @@
       (t.result === 'TP' || t.result === 'SL') &&
       MFES.indexOf(t.mfe) !== -1 &&
       typeof t.createdAt === 'number' &&
-      CTX_KEYS.every(function (k) { return t[k] === null || CTX[k].indexOf(t[k]) !== -1; });
+      validEntry(t.entry);
   }
 
-  // Lleva un trade de cualquier versión al formato actual (los campos de contexto que falten quedan en null).
+  // v2 guardaba un valor suelto o null; v3 guarda una lista sin repetidos, en el orden de ENTRIES.
+  function normalizeEntry(e) {
+    var list = Array.isArray(e) ? e : (e === null || e === undefined ? [] : [e]);
+    return ENTRIES.filter(function (x) { return list.indexOf(x) !== -1; });
+  }
+
+  // Lleva un trade de cualquier versión al formato actual.
   function normalize(t) {
     if (!t || typeof t !== 'object') return null;
-    var out = {
+    return {
       id: t.id, date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
-      note: typeof t.note === 'string' ? t.note.slice(0, 500) : '', createdAt: t.createdAt
+      note: typeof t.note === 'string' ? t.note.slice(0, 500) : '', createdAt: t.createdAt,
+      entry: normalizeEntry(t.entry)
     };
-    CTX_KEYS.forEach(function (k) { out[k] = CTX[k].indexOf(t[k]) !== -1 ? t[k] : null; });
-    return out;
   }
 
   function uid() {
@@ -52,12 +59,12 @@
     var raw = null, src = KEY;
     try {
       raw = localStorage.getItem(KEY);
-      if (!raw) { src = OLD_KEY; raw = localStorage.getItem(OLD_KEY); }
+      for (var i = 0; !raw && i < OLD_KEYS.length; i++) { src = OLD_KEYS[i]; raw = localStorage.getItem(src); }
       if (!raw) return { trades: [], lastDate: null };
       var d = JSON.parse(raw);
       if (!d || !Array.isArray(d.trades)) throw new Error('formato');
       var s = { trades: d.trades.map(normalize).filter(valid), lastDate: d.lastDate || null };
-      if (src === OLD_KEY) {
+      if (src !== KEY) {
         try { localStorage.setItem(KEY, serialize(s)); } catch (e) { /* se reintenta en el próximo guardado */ }
       }
       return s;
@@ -78,7 +85,7 @@
   }
 
   var api = {
-    CTX: CTX,
+    ENTRIES: ENTRIES,
     all: function () { return state.trades.slice(); },
     getLastDate: function () { return state.lastDate; },
     setLastDate: function (d) { state.lastDate = d; return persist(); },
@@ -116,7 +123,7 @@
     exportJSON: function () {
       return JSON.stringify({ version: VERSION, exportedAt: new Date().toISOString(), trades: state.trades }, null, 2);
     },
-    // Mezcla por id: no duplica lo que ya está. Acepta exportaciones v1 y v2.
+    // Mezcla por id: no duplica lo que ya está. Acepta exportaciones v1, v2 y v3.
     importJSON: function (text) {
       var d = JSON.parse(text);
       var list = Array.isArray(d) ? d : d.trades;

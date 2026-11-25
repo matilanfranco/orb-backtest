@@ -10,7 +10,7 @@ Sin dependencias ni build: HTML + CSS + JS puro.
 2. **R:R**: 1:1 por defecto (también 1.5:1 y 2:1).
 3. **¿Salió SL o Take?**
 4. **Máximo movimiento antes de llegar al nivel del SL**: menos de 1:1, 1:1, 1.5:1, 2:1 o más de 2:1. Las opciones imposibles quedan deshabilitadas (si salió Take, el movimiento fue al menos tu R:R; si salió SL, no llegó a tu objetivo).
-5. **Punto de entrada (opcional)**, en la misma pantalla: **FVG**, **OB** o **Borde del rango**. Tocá de nuevo para quitarlo. Abajo hay un cuadro de **descripción** libre (opcional).
+5. **Punto de entrada (opcional)**, en la misma pantalla: **FVG**, **OB** y/o **Borde del rango**. Podés marcar varios; tocá de nuevo para desmarcar. Abajo hay un cuadro de **descripción** libre (opcional).
 6. **Guardar**. La fecha queda seleccionada para cargar varios trades del mismo día.
 
 ## Estadísticas
@@ -23,7 +23,7 @@ Filtrables por tipo de entrada (todas / absorción / ruptura):
 - Curva de capital en R.
 - **Take profit ideal**: para 1:1, 1.5:1 y 2:1, qué porcentaje de tus trades llegó al objetivo y qué expectativa daría cada uno.
 - Distribución del máximo movimiento.
-- **Take profit ideal por punto de entrada**: para FVG, OB y borde del rango, la expectativa con 1:1, 1.5:1 y 2:1. Los grupos con menos de 10 trades se ven atenuados.
+- **Take profit ideal por punto de entrada**: para FVG, OB y borde del rango, la expectativa con 1:1, 1.5:1 y 2:1. Si un trade tiene varios marcados, cuenta en cada grupo. Los grupos con menos de 10 trades se ven atenuados.
 - Desglose por R:R elegido y por día de la semana.
 
 **Supuesto del take profit ideal:** un trade "gana" con objetivo T si su máximo movimiento llegó a T; si no llegó, se asume pérdida de 1R. Con menos de ~30 trades la app avisa que la muestra es chica.

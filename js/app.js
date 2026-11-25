@@ -14,11 +14,8 @@
     { v: 2, label: '2:1' },
     { v: 3, label: 'Más de 2:1' }
   ];
-  // Campos de contexto (opcionales). Los valores tienen que coincidir con BTStore.CTX.
-  var CTX_FIELDS = [
-    { k: 'entry', label: 'Punto de entrada', short: 'Entrada en',
-      opts: [['fvg', 'FVG'], ['ob', 'OB'], ['borde', 'Borde del rango']] }
-  ];
+  // Punto de entrada (multiselección). Los valores tienen que coincidir con BTStore.ENTRIES.
+  var ENTRY_OPTS = [['fvg', 'FVG'], ['ob', 'OB'], ['borde', 'Borde del rango']];
   var DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var TITLES = { log: 'Registrar', stats: 'Estadísticas', history: 'Historial' };
 
@@ -34,7 +31,7 @@
 
   /* ---------- helpers ---------- */
   function newDraft() {
-    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: null };
+    return { type: null, rr: 1, result: null, mfe: null, note: '', entry: [] };
   }
   function pad(n) { return String(n).padStart(2, '0'); }
   function todayStr() {
@@ -60,21 +57,10 @@
     return new Date(p[0], p[1] - 1, p[2]).getDay();
   }
   function mfeAllowed(v, rr, result) { return result === 'TP' ? v >= rr : v < rr; }
-  function ctxField(k) { return CTX_FIELDS.filter(function (f) { return f.k === k; })[0]; }
-  function ctxOptLabel(f, v) {
-    var o = f.opts.filter(function (x) { return x[0] === v; })[0];
-    return o ? o[1] : '';
-  }
-  // Resumen corto para el historial, ej: "Rango grande · Espacio >2R · Vela fuerte · Noticias".
-  function ctxSummary(t) {
-    var parts = [];
-    CTX_FIELDS.forEach(function (f) {
-      var v = t[f.k];
-      if (v === null || v === undefined) return;
-      var lbl = ctxOptLabel(f, v);
-      parts.push(f.short + ' ' + (/^[A-ZÁÉÍÓÚ][a-záéíóú]/.test(lbl) ? lbl.toLowerCase() : lbl));
-    });
-    return parts.join(' · ');
+  // Ej: "FVG + OB". Vacío si no se marcó ninguno.
+  function entryLabel(entry) {
+    return ENTRY_OPTS.filter(function (o) { return (entry || []).indexOf(o[0]) !== -1; })
+      .map(function (o) { return o[1]; }).join(' + ');
   }
 
   var toastTimer = null;
@@ -153,15 +139,14 @@
         '</div>' +
       '</section>' +
       '<section class="card">' +
-        CTX_FIELDS.map(function (f) {
-          return '<p class="lbl">' + f.label + ' <span class="hint">· opcional, tocá de nuevo para quitar</span></p>' +
-            '<div class="chips ctx">' +
-              f.opts.map(function (o) {
-                return '<button class="chip' + (d[f.k] === o[0] ? ' sel' : '') + '" data-action="ctx" data-k="' + f.k +
-                  '" data-v="' + String(o[0]) + '">' + o[1] + (o[2] ? '<small>' + o[2] + '</small>' : '') + '</button>';
-              }).join('') +
-            '</div>';
-        }).join('') +
+        '<p class="lbl">Punto de entrada <span class="hint">· opcional, podés marcar varios</span></p>' +
+        '<div class="chips ctx">' +
+          ENTRY_OPTS.map(function (o) {
+            var on = d.entry.indexOf(o[0]) !== -1;
+            return '<button class="chip' + (on ? ' sel' : '') + '" aria-pressed="' + on + '" data-action="entry" data-v="' + o[0] + '">' +
+              (on ? '✓ ' : '') + o[1] + '</button>';
+          }).join('') +
+        '</div>' +
         '<label class="lbl" for="note">Descripción (opcional)</label>' +
         '<textarea id="note" class="input area" maxlength="500" rows="3" placeholder="ej: barrió el máximo y dejó FVG en M1">' + esc(d.note) + '</textarea>' +
       '</section>' +
@@ -305,32 +290,31 @@
       'Si los ± del win rate se superponen mucho, la diferencia todavía puede ser casualidad.</p></section>';
   }
 
-  // Expectativa de cada objetivo (1, 1.5, 2) segmentada por cada campo de contexto.
+  // Expectativa de cada objetivo (1, 1.5, 2) por punto de entrada.
   function contextSection(trades) {
-    var tables = CTX_FIELDS.map(function (f) {
-      var g = S.groupByField(trades, f.k);
-      if (!g.withData) return '';
-      var rows = f.opts.filter(function (o) { return g.groups[String(o[0])]; }).map(function (o) {
-        var grp = g.groups[String(o[0])];
-        var best = grp.ideal.best;
-        return '<tr' + (grp.summary.n < 10 ? ' class="low"' : '') + '><td>' + o[1] + '</td><td>' + grp.summary.n + '</td>' +
-          grp.ideal.rows.map(function (r) {
-            var b = r.target === best;
-            return '<td class="' + cls(r.expectancy) + (b ? ' bestc' : '') + '">' +
-              (r.expectancy > 0 ? '+' : '') + r.expectancy.toFixed(2) + (b ? '★' : '') + '</td>';
-          }).join('') + '</tr>';
-      });
-      return (g.missing ? '<p class="hint">' + g.missing + ' trade' + (g.missing === 1 ? '' : 's') + ' sin punto de entrada marcado</p>' : '') +
-        '<table class="tbl"><thead><tr><th></th><th>N</th>' +
-        S.TARGETS.map(function (T) { return '<th>' + rrLabel(T) + '</th>'; }).join('') +
-        '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
-    }).join('');
-    if (!tables) {
-      return '<section class="card"><h3>Take profit ideal por punto de entrada</h3>' +
-        '<p class="hint">Todavía no marcaste el punto de entrada en ningún trade. Se marca (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
+    var title = '<section class="card"><h3>Take profit ideal por punto de entrada</h3>';
+    var g = S.groupByTags(trades, 'entry');
+    if (!g.withData) {
+      return title + '<p class="hint">Todavía no marcaste el punto de entrada en ningún trade. ' +
+        'Se marca (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
     }
-    return '<section class="card"><h3>Take profit ideal por punto de entrada</h3>' + tables +
+    var rows = ENTRY_OPTS.filter(function (o) { return g.groups[o[0]]; }).map(function (o) {
+      var grp = g.groups[o[0]];
+      var best = grp.ideal.best;
+      return '<tr' + (grp.summary.n < 10 ? ' class="low"' : '') + '><td>' + o[1] + '</td><td>' + grp.summary.n + '</td>' +
+        grp.ideal.rows.map(function (r) {
+          var b = r.target === best;
+          return '<td class="' + cls(r.expectancy) + (b ? ' bestc' : '') + '">' +
+            (r.expectancy > 0 ? '+' : '') + r.expectancy.toFixed(2) + (b ? '★' : '') + '</td>';
+        }).join('') + '</tr>';
+    });
+    return title +
+      (g.missing ? '<p class="hint">' + g.missing + ' trade' + (g.missing === 1 ? '' : 's') + ' sin punto de entrada marcado</p>' : '') +
+      '<table class="tbl"><thead><tr><th></th><th>N</th>' +
+      S.TARGETS.map(function (T) { return '<th>' + rrLabel(T) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows.join('') + '</tbody></table>' +
       '<p class="hint">Expectativa en R por trade con cada objetivo. ★ = mejor objetivo del grupo. ' +
+      'Si un trade tiene varios puntos marcados, cuenta en cada uno. ' +
       'Los grupos con menos de 10 trades se ven atenuados: todavía no son confiables.</p></section>';
   }
 
@@ -369,7 +353,7 @@
         '<div class="top"><span class="date">' + esc(t.date) + '</span>' +
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
-        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (ctxSummary(t) ? ' · ' + esc(ctxSummary(t)) : '') + '</div>' +
+        '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (entryLabel(t.entry) ? ' · Entrada en ' + esc(entryLabel(t.entry)) : '') + '</div>' +
         (t.note ? '<div class="sub ctx">' + esc(t.note) + '</div>' : '') +
         '<div class="acts">' +
           '<button class="edit" aria-label="Editar trade" data-action="edit" data-id="' + esc(t.id) + '">Editar</button>' +
@@ -412,9 +396,8 @@
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
     var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'punto_entrada', 'descripcion']];
-    function v(x) { return x === null || x === undefined ? '' : x; }
     S.sortTrades(DB.all()).forEach(function (t) {
-      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, v(t.entry), t.note || '']);
+      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, (t.entry || []).join('+'), t.note || '']);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
   }
@@ -455,11 +438,10 @@
       render();
     },
     mfe: function (el) { ui.draft.mfe = Number(el.dataset.v); render(); },
-    ctx: function (el) {
-      var f = ctxField(el.dataset.k);
-      var o = f && f.opts.filter(function (x) { return String(x[0]) === el.dataset.v; })[0];
-      if (!o) return;
-      ui.draft[f.k] = ui.draft[f.k] === o[0] ? null : o[0];
+    entry: function (el) {
+      var v = el.dataset.v, cur = ui.draft.entry;
+      var next = cur.indexOf(v) === -1 ? cur.concat([v]) : cur.filter(function (x) { return x !== v; });
+      ui.draft.entry = ENTRY_OPTS.map(function (o) { return o[0]; }).filter(function (x) { return next.indexOf(x) !== -1; });
       var y = window.scrollY;
       render();
       window.scrollTo(0, y);
@@ -490,7 +472,7 @@
       if (!ui.editId) ui.prevDate = ui.date;
       ui.editId = t.id;
       ui.date = t.date;
-      ui.draft = { type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: t.entry };
+      ui.draft = { type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: (t.entry || []).slice() };
       ui.step = 3; // arranca en la pantalla más usada; con Atrás se cambia el resto
       ui.tab = 'log';
       render();
