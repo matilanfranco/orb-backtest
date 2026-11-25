@@ -131,3 +131,12 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
   opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10; max-width: 90vw; text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* contexto */
+.chips.ctx { gap: 8px; }
+.chips.ctx .chip { min-height: 46px; padding: 6px 8px; font-size: 15px; }
+.card h3 small { font-weight: 400; }
+.lbl .hint { font-size: 12px; }
+.tbl td.bestc { font-weight: 700; }
+.tbl tr.low td { opacity: .5; }
+.item .sub.ctx { margin-top: 2px; font-size: 12px; }

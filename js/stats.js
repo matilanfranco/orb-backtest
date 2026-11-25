@@ -101,6 +101,16 @@
     return out;
   }
 
+  // Agrupa por un campo de contexto (rango, espacio, vela, noticias) y deja aparte los trades sin dato.
+  function groupByField(trades, field) {
+    var withData = trades.filter(function (t) { return t[field] !== null && t[field] !== undefined; });
+    return {
+      groups: groupBy(withData, function (t) { return t[field]; }),
+      withData: withData.length,
+      missing: trades.length - withData.length
+    };
+  }
+
   var api = {
     TARGETS: TARGETS,
     rOf: rOf,
@@ -108,7 +118,8 @@
     summarize: summarize,
     idealTargets: idealTargets,
     mfeDistribution: mfeDistribution,
-    groupBy: groupBy
+    groupBy: groupBy,
+    groupByField: groupByField
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

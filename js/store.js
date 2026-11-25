@@ -2,10 +2,22 @@
 (function (root) {
   'use strict';
 
-  var KEY = 'orb-bt:v1';
+  // v2 suma campos de contexto (opcionales). v1 se migra al abrir y queda intacta como respaldo.
+  var KEY = 'orb-bt:v2';
+  var OLD_KEY = 'orb-bt:v1';
+  var VERSION = 2;
   var TYPES = ['absorcion', 'ruptura'];
   var RRS = [1, 1.5, 2];
   var MFES = [0, 1, 1.5, 2, 3]; // 0 = menos de 1:1, 3 = más de 2:1
+
+  // Contexto del setup. null = no se cargó.
+  var CTX = {
+    range: ['chico', 'normal', 'grande'], // tamaño de la vela 9:30–9:45 vs ATR diario
+    space: ['lt1', '1a2', 'gt2'],         // espacio hasta el próximo nivel, en R desde la entrada
+    candle: ['fuerte', 'debil'],          // calidad de la vela de ruptura
+    news: [true, false]                   // día de noticias
+  };
+  var CTX_KEYS = Object.keys(CTX);
 
   function valid(t) {
     return t && typeof t.id === 'string' &&
@@ -14,33 +26,54 @@
       RRS.indexOf(t.rr) !== -1 &&
       (t.result === 'TP' || t.result === 'SL') &&
       MFES.indexOf(t.mfe) !== -1 &&
-      typeof t.createdAt === 'number';
+      typeof t.createdAt === 'number' &&
+      CTX_KEYS.every(function (k) { return t[k] === null || CTX[k].indexOf(t[k]) !== -1; });
+  }
+
+  // Lleva un trade de cualquier versión al formato actual (los campos de contexto que falten quedan en null).
+  function normalize(t) {
+    if (!t || typeof t !== 'object') return null;
+    var out = {
+      id: t.id, date: t.date, type: t.type, rr: t.rr, result: t.result, mfe: t.mfe,
+      note: typeof t.note === 'string' ? t.note.slice(0, 300) : '', createdAt: t.createdAt
+    };
+    CTX_KEYS.forEach(function (k) { out[k] = CTX[k].indexOf(t[k]) !== -1 ? t[k] : null; });
+    return out;
   }
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  function serialize(s) {
+    return JSON.stringify({ version: VERSION, trades: s.trades, lastDate: s.lastDate });
+  }
+
   var state = load();
 
   function load() {
-    var raw = null;
+    var raw = null, src = KEY;
     try {
       raw = localStorage.getItem(KEY);
+      if (!raw) { src = OLD_KEY; raw = localStorage.getItem(OLD_KEY); }
       if (!raw) return { trades: [], lastDate: null };
       var d = JSON.parse(raw);
       if (!d || !Array.isArray(d.trades)) throw new Error('formato');
-      return { trades: d.trades.filter(valid), lastDate: d.lastDate || null };
+      var s = { trades: d.trades.map(normalize).filter(valid), lastDate: d.lastDate || null };
+      if (src === OLD_KEY) {
+        try { localStorage.setItem(KEY, serialize(s)); } catch (e) { /* se reintenta en el próximo guardado */ }
+      }
+      return s;
     } catch (e) {
       // Si algo está corrupto, guardamos copia antes de que se pise.
-      try { if (raw) localStorage.setItem(KEY + ':corrupt', raw); } catch (e2) { /* nada */ }
+      try { if (raw) localStorage.setItem(src + ':corrupt', raw); } catch (e2) { /* nada */ }
       return { trades: [], lastDate: null };
     }
   }
 
   function persist() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ version: 1, trades: state.trades, lastDate: state.lastDate }));
+      localStorage.setItem(KEY, serialize(state));
       return true;
     } catch (e) {
       return false;
@@ -48,14 +81,16 @@
   }
 
   var api = {
+    CTX: CTX,
     all: function () { return state.trades.slice(); },
     getLastDate: function () { return state.lastDate; },
     setLastDate: function (d) { state.lastDate = d; return persist(); },
     add: function (t) {
-      var trade = {
+      var trade = normalize({
         id: uid(), date: t.date, type: t.type, rr: t.rr, result: t.result,
-        mfe: t.mfe, note: (t.note || '').slice(0, 300), createdAt: Date.now()
-      };
+        mfe: t.mfe, note: t.note || '', createdAt: Date.now(),
+        range: t.range, space: t.space, candle: t.candle, news: t.news
+      });
       if (!valid(trade)) return null;
       state.trades.push(trade);
       return persist() ? trade : null;
@@ -66,9 +101,9 @@
     },
     clear: function () { state.trades = []; return persist(); },
     exportJSON: function () {
-      return JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), trades: state.trades }, null, 2);
+      return JSON.stringify({ version: VERSION, exportedAt: new Date().toISOString(), trades: state.trades }, null, 2);
     },
-    // Mezcla por id: no duplica lo que ya está.
+    // Mezcla por id: no duplica lo que ya está. Acepta exportaciones v1 y v2.
     importJSON: function (text) {
       var d = JSON.parse(text);
       var list = Array.isArray(d) ? d : d.trades;
@@ -76,7 +111,7 @@
       var have = {};
       state.trades.forEach(function (t) { have[t.id] = true; });
       var added = 0;
-      list.forEach(function (t) {
+      list.map(normalize).forEach(function (t) {
         if (valid(t) && !have[t.id]) { state.trades.push(t); have[t.id] = true; added++; }
       });
       persist();
@@ -85,4 +120,4 @@
   };
 
   root.BTStore = api;
-})(window);
+})(typeof window !== 'undefined' ? window : globalThis);

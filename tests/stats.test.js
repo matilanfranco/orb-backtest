@@ -91,3 +91,32 @@ test('orden por fecha y luego por creación', () => {
   const ids = S.sortTrades(unsorted).map(t => t.id);
   assert.deepStrictEqual(ids, ['1', '2', '3', '4']);
 });
+
+test('groupByField: agrupa por contexto y cuenta los sin dato', () => {
+  const t = [
+    { ...mk('2026-04-01', 'ruptura', 1, 'TP', 2, 1), space: 'gt2' },
+    { ...mk('2026-04-02', 'ruptura', 1, 'TP', 1.5, 2), space: 'gt2' },
+    { ...mk('2026-04-03', 'ruptura', 1, 'SL', 0, 3), space: 'lt1' },
+    { ...mk('2026-04-04', 'ruptura', 1, 'TP', 1, 4), space: null },
+    mk('2026-04-05', 'ruptura', 1, 'SL', 0, 5) // trade viejo, sin el campo
+  ];
+  const g = S.groupByField(t, 'space');
+  assert.strictEqual(g.withData, 3);
+  assert.strictEqual(g.missing, 2);
+  assert.deepStrictEqual(Object.keys(g.groups).sort(), ['gt2', 'lt1']);
+  assert.strictEqual(g.groups.gt2.summary.n, 2);
+  assert.strictEqual(g.groups.gt2.ideal.best, 1.5);
+  assert.strictEqual(g.groups.lt1.ideal.best, 1);
+});
+
+test('groupByField: booleanos (noticias) quedan como claves "true"/"false"', () => {
+  const t = [
+    { ...mk('2026-04-01', 'absorcion', 1, 'TP', 1, 1), news: true },
+    { ...mk('2026-04-02', 'absorcion', 1, 'SL', 0, 2), news: false },
+    { ...mk('2026-04-03', 'absorcion', 1, 'SL', 0, 3), news: false }
+  ];
+  const g = S.groupByField(t, 'news');
+  assert.strictEqual(g.groups.true.summary.n, 1);
+  assert.strictEqual(g.groups.false.summary.n, 2);
+  assert.strictEqual(g.missing, 0);
+});

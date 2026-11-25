@@ -14,6 +14,17 @@
     { v: 2, label: '2:1' },
     { v: 3, label: 'Más de 2:1' }
   ];
+  // Campos de contexto (opcionales). Los valores tienen que coincidir con BTStore.CTX.
+  var CTX_FIELDS = [
+    { k: 'range', label: 'Rango vs ATR diario', hint: 'vela 9:30–9:45', short: 'Rango',
+      opts: [['chico', 'Chico', '<15%'], ['normal', 'Normal', '15–30%'], ['grande', 'Grande', '>30%']] },
+    { k: 'space', label: 'Espacio hasta el próximo nivel', hint: 'PDH/PDL, Asia, Londres · en R desde la entrada', short: 'Espacio',
+      opts: [['lt1', '<1R'], ['1a2', '1–2R'], ['gt2', '>2R']] },
+    { k: 'candle', label: 'Vela de ruptura', short: 'Vela',
+      opts: [['fuerte', 'Fuerte', 'cuerpo grande / FVG'], ['debil', 'Débil']] },
+    { k: 'news', label: 'Día de noticias', short: 'Noticias',
+      opts: [[true, 'Sí'], [false, 'No']] }
+  ];
   var DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
   var TITLES = { log: 'Registrar', stats: 'Estadísticas', history: 'Historial' };
 
@@ -26,7 +37,9 @@
   };
 
   /* ---------- helpers ---------- */
-  function newDraft() { return { type: null, rr: 1, result: null, mfe: null, note: '' }; }
+  function newDraft() {
+    return { type: null, rr: 1, result: null, mfe: null, note: '', range: null, space: null, candle: null, news: null };
+  }
   function pad(n) { return String(n).padStart(2, '0'); }
   function todayStr() {
     var d = new Date();
@@ -51,6 +64,23 @@
     return new Date(p[0], p[1] - 1, p[2]).getDay();
   }
   function mfeAllowed(v, rr, result) { return result === 'TP' ? v >= rr : v < rr; }
+  function ctxField(k) { return CTX_FIELDS.filter(function (f) { return f.k === k; })[0]; }
+  function ctxOptLabel(f, v) {
+    var o = f.opts.filter(function (x) { return x[0] === v; })[0];
+    return o ? o[1] : '';
+  }
+  // Resumen corto para el historial, ej: "Rango grande · Espacio >2R · Vela fuerte · Noticias".
+  function ctxSummary(t) {
+    var parts = [];
+    CTX_FIELDS.forEach(function (f) {
+      var v = t[f.k];
+      if (v === null || v === undefined) return;
+      if (f.k === 'news') { if (v) parts.push('Noticias'); else parts.push('Sin noticias'); return; }
+      var lbl = ctxOptLabel(f, v);
+      parts.push(f.short + ' ' + (/^[A-ZÁÉÍÓÚ][a-záéíóú]/.test(lbl) ? lbl.toLowerCase() : lbl));
+    });
+    return parts.join(' · ');
+  }
 
   var toastTimer = null;
   function toast(msg) {
@@ -124,6 +154,18 @@
               (ok ? '' : ' disabled') + ' data-action="mfe" data-v="' + o.v + '">' + o.label + '</button>';
           }).join('') +
         '</div>' +
+      '</section>' +
+      '<section class="card">' +
+        '<h3>Contexto <small class="hint">(opcional · tocá de nuevo para quitar)</small></h3>' +
+        CTX_FIELDS.map(function (f) {
+          return '<p class="lbl">' + f.label + (f.hint ? ' <span class="hint">· ' + f.hint + '</span>' : '') + '</p>' +
+            '<div class="chips ctx">' +
+              f.opts.map(function (o) {
+                return '<button class="chip' + (d[f.k] === o[0] ? ' sel' : '') + '" data-action="ctx" data-k="' + f.k +
+                  '" data-v="' + String(o[0]) + '">' + o[1] + (o[2] ? '<small>' + o[2] + '</small>' : '') + '</button>';
+              }).join('') +
+            '</div>';
+        }).join('') +
         '<label class="lbl" for="note">Nota (opcional)</label>' +
         '<input type="text" id="note" class="input" maxlength="300" placeholder="ej: FVG + estructura M1" value="' + esc(d.note) + '">' +
       '</section>' +
@@ -220,6 +262,8 @@
       html += '<section class="card"><h3>Por tipo de entrada</h3>' + groupTable(byType, function (k) { return TYPE_LABEL[k]; }, ['absorcion', 'ruptura']) + '</section>';
     }
 
+    html += contextSection(trades);
+
     var byRR = S.groupBy(trades, function (t) { return t.rr; });
     html += '<section class="card"><h3>Por R:R elegido</h3>' + groupTable(byRR, function (k) { return rrLabel(Number(k)); }, ['1', '1.5', '2'], true) + '</section>';
 
@@ -227,6 +271,35 @@
     html += '<section class="card"><h3>Por día de la semana</h3>' + groupTable(byDay, function (k) { return DAYS[k]; }, ['1', '2', '3', '4', '5', '0', '6'], true) + '</section>';
 
     return html;
+  }
+
+  // Expectativa de cada objetivo (1, 1.5, 2) segmentada por cada campo de contexto.
+  function contextSection(trades) {
+    var tables = CTX_FIELDS.map(function (f) {
+      var g = S.groupByField(trades, f.k);
+      if (!g.withData) return '';
+      var rows = f.opts.filter(function (o) { return g.groups[String(o[0])]; }).map(function (o) {
+        var grp = g.groups[String(o[0])];
+        var best = grp.ideal.best;
+        return '<tr' + (grp.summary.n < 10 ? ' class="low"' : '') + '><td>' + o[1] + '</td><td>' + grp.summary.n + '</td>' +
+          grp.ideal.rows.map(function (r) {
+            var b = r.target === best;
+            return '<td class="' + cls(r.expectancy) + (b ? ' bestc' : '') + '">' +
+              (r.expectancy > 0 ? '+' : '') + r.expectancy.toFixed(2) + (b ? '★' : '') + '</td>';
+          }).join('') + '</tr>';
+      });
+      return '<p class="lbl">' + f.label + (g.missing ? ' <span class="hint">· ' + g.missing + ' sin dato</span>' : '') + '</p>' +
+        '<table class="tbl"><thead><tr><th></th><th>N</th>' +
+        S.TARGETS.map(function (T) { return '<th>' + rrLabel(T) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+    }).join('');
+    if (!tables) {
+      return '<section class="card"><h3>Take profit ideal por contexto</h3>' +
+        '<p class="hint">Todavía no cargaste contexto en ningún trade. Se carga (opcional) al registrar, en la pantalla del máximo movimiento.</p></section>';
+    }
+    return '<section class="card"><h3>Take profit ideal por contexto</h3>' + tables +
+      '<p class="hint">Expectativa en R por trade con cada objetivo. ★ = mejor objetivo del grupo. ' +
+      'Los grupos con menos de 10 trades se ven atenuados: todavía no son confiables.</p></section>';
   }
 
   function groupTable(groups, label, order, noBest) {
@@ -265,6 +338,7 @@
           '<span class="tag ' + t.type + '">' + TYPE_LABEL[t.type] + '</span>' +
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
         '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (t.note ? ' · ' + esc(t.note) : '') + '</div>' +
+        (ctxSummary(t) ? '<div class="sub ctx">' + esc(ctxSummary(t)) + '</div>' : '') +
         '<button class="del" aria-label="Borrar trade" data-action="del" data-id="' + esc(t.id) + '">Borrar</button>' +
       '</div>';
     }).join('') + '</section>';
@@ -302,9 +376,10 @@
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
   function toCSV() {
-    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'nota']];
+    var rows = [['fecha', 'tipo', 'rr', 'resultado', 'r', 'max_movimiento', 'rango_atr', 'espacio_nivel', 'vela_ruptura', 'noticias', 'nota']];
+    function v(x) { return x === null || x === undefined ? '' : (x === true ? 'si' : (x === false ? 'no' : x)); }
     S.sortTrades(DB.all()).forEach(function (t) {
-      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, t.note || '']);
+      rows.push([t.date, t.type, t.rr, t.result, S.rOf(t), t.mfe, v(t.range), v(t.space), v(t.candle), v(t.news), t.note || '']);
     });
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
   }
@@ -316,6 +391,9 @@
       DB.setLastDate(ui.date);
       ui.draft = newDraft();
       ui.draft.type = el.dataset.v;
+      // El rango y las noticias son del día: se copian del último trade cargado en esa fecha.
+      var sameDay = S.sortTrades(DB.all()).filter(function (t) { return t.date === ui.date; }).pop();
+      if (sameDay) { ui.draft.range = sameDay.range; ui.draft.news = sameDay.news; }
       ui.step = 1;
       render();
     },
@@ -324,10 +402,22 @@
     back: function () { ui.step = Math.max(0, ui.step - 1); if (ui.step < 3) ui.draft.mfe = null; render(); },
     result: function (el) { ui.draft.result = el.dataset.v; ui.draft.mfe = null; ui.step = 3; render(); },
     mfe: function (el) { ui.draft.mfe = Number(el.dataset.v); render(); },
+    ctx: function (el) {
+      var f = ctxField(el.dataset.k);
+      var o = f && f.opts.filter(function (x) { return String(x[0]) === el.dataset.v; })[0];
+      if (!o) return;
+      ui.draft[f.k] = ui.draft[f.k] === o[0] ? null : o[0];
+      var y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    },
     save: function () {
       var d = ui.draft;
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
-      var t = DB.add({ date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note });
+      var t = DB.add({
+        date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
+        range: d.range, space: d.space, candle: d.candle, news: d.news
+      });
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
       ui.draft = newDraft();
       ui.step = 0;
