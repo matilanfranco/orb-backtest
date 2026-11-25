@@ -105,14 +105,17 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .item { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; position: relative; }
 .item .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .item .date { font-weight: 600; }
-.item .sub { color: var(--muted); font-size: 13px; margin-top: 6px; padding-right: 64px; }
+.item .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .tag { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
 .tag.absorcion { color: var(--blue); border-color: var(--blue); }
 .tag.ruptura { color: var(--purple); border-color: var(--purple); }
 .badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
 .badge.tp { background: rgba(76,195,138,.18); color: var(--green); }
 .badge.sl { background: rgba(239,91,91,.18); color: var(--red); }
-.del { position: absolute; right: 10px; bottom: 10px; background: none; border: 0; color: var(--red); font: inherit; font-size: 13px; padding: 8px; cursor: pointer; }
+.acts { display: flex; justify-content: flex-end; gap: 4px; margin: 2px -6px -8px 0; }
+.acts button { background: none; border: 0; font: inherit; font-size: 13px; padding: 10px 8px; cursor: pointer; }
+.acts .edit { color: var(--blue); }
+.acts .del { color: var(--red); }
 
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex;
@@ -147,3 +150,9 @@ main { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(90px + env(safe
 .tbl.cmp th.abs { color: var(--blue); font-size: 13px; font-weight: 600; }
 .tbl.cmp th.brk { color: var(--purple); font-size: 13px; font-weight: 600; }
 .tbl.cmp td.better { font-weight: 700; background: rgba(76,195,138,.08); }
+
+/* edición */
+.editbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(240,180,41,.12);
+  border: 1px solid rgba(240,180,41,.5); color: var(--amber); border-radius: 12px; padding: 6px 6px 6px 14px; margin-bottom: 12px; font-weight: 600; }
+.editbar .chip { flex: 0 0 auto; min-height: 40px; font-size: 14px; }
+.btn.cur { outline: 3px solid var(--text); outline-offset: 2px; }

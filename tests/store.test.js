@@ -65,3 +65,27 @@ test('importa exportaciones v1 y no duplica', () => {
   assert.strictEqual(DB.importJSON(file), 0);
   assert.strictEqual(DB.all()[0].entry, null);
 });
+
+test('update edita un trade y mantiene id y createdAt', () => {
+  const { DB, data } = loadStore({});
+  const a = DB.add({ date: '2026-03-01', type: 'absorcion', rr: 1, result: 'SL', mfe: 0, note: '' });
+  const b = DB.add({ date: '2026-03-02', type: 'ruptura', rr: 1, result: 'TP', mfe: 1, note: '' });
+  const u = DB.update(a.id, { date: '2026-03-03', type: 'ruptura', rr: 1.5, result: 'TP', mfe: 2, note: 'corregido', entry: 'ob' });
+  assert.ok(u);
+  assert.strictEqual(u.id, a.id);
+  assert.strictEqual(u.createdAt, a.createdAt);
+  assert.deepStrictEqual([u.date, u.type, u.rr, u.result, u.mfe, u.note, u.entry],
+    ['2026-03-03', 'ruptura', 1.5, 'TP', 2, 'corregido', 'ob']);
+  assert.strictEqual(DB.all().length, 2);
+  assert.strictEqual(DB.all().find(t => t.id === b.id).note, '');
+  const saved = JSON.parse(data['orb-bt:v2']).trades.find(t => t.id === a.id);
+  assert.strictEqual(saved.note, 'corregido');
+});
+
+test('update rechaza datos inválidos y no toca el trade', () => {
+  const { DB } = loadStore({});
+  const a = DB.add({ date: '2026-03-01', type: 'absorcion', rr: 1, result: 'SL', mfe: 0, note: 'x' });
+  assert.strictEqual(DB.update(a.id, { date: 'mal', type: 'absorcion', rr: 1, result: 'SL', mfe: 0 }), null);
+  assert.strictEqual(DB.update('no-existe', { date: '2026-03-01', type: 'absorcion', rr: 1, result: 'SL', mfe: 0 }), null);
+  assert.deepStrictEqual(DB.all()[0], a);
+});

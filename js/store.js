@@ -92,6 +92,22 @@
       state.trades.push(trade);
       return persist() ? trade : null;
     },
+    // Reemplaza los datos de un trade existente. Mantiene id y createdAt (el orden del historial no cambia).
+    update: function (id, t) {
+      var i = -1;
+      state.trades.forEach(function (x, k) { if (x.id === id) i = k; });
+      if (i === -1) return null;
+      var old = state.trades[i];
+      var trade = normalize({
+        id: old.id, date: t.date, type: t.type, rr: t.rr, result: t.result,
+        mfe: t.mfe, note: t.note || '', createdAt: old.createdAt, entry: t.entry
+      });
+      if (!valid(trade)) return null;
+      state.trades[i] = trade;
+      if (persist()) return trade;
+      state.trades[i] = old;
+      return null;
+    },
     remove: function (id) {
       state.trades = state.trades.filter(function (t) { return t.id !== id; });
       return persist();

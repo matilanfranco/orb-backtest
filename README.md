@@ -51,6 +51,7 @@ Después, en el celu:
 
 - Se guardan en el `localStorage` del navegador, en tu dispositivo. No hay servidor ni cuenta.
 - El `localStorage` se puede perder si borrás los datos del sitio o desinstalás la app. En iPhone, Safari puede limpiar el almacenamiento de sitios que no se usan por varios días; instalada en la pantalla de inicio es mucho más estable.
+- **Editar un trade:** Historial → *Editar*. Abre en la pantalla del máximo movimiento / punto de entrada / descripción; con *Atrás* podés cambiar también resultado, R:R, tipo y fecha. *Cancelar* descarta los cambios.
 - **Hacé backup de vez en cuando:** Historial → *Exportar JSON* (o CSV). *Importar JSON* mezcla sin duplicar.
 
 ## Estructura

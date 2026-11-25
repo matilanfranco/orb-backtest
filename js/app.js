@@ -23,6 +23,8 @@
   var TITLES = { log: 'Registrar', stats: 'Estadísticas', history: 'Historial' };
 
   var ui = {
+    editId: null,   // id del trade que se está editando (null = registrando uno nuevo)
+    prevDate: null, // fecha de registro a restaurar al terminar de editar
     tab: 'log',
     step: 0,
     date: DB.getLastDate() || todayStr(),
@@ -87,21 +89,23 @@
   /* ---------- registrar ---------- */
   function viewLog() {
     var d = ui.draft;
+    var editBar = ui.editId ? '<div class="editbar"><span>Editando trade</span>' +
+      '<button class="chip" data-action="cancel-edit">Cancelar</button></div>' : '';
     if (ui.step === 0) {
       var count = DB.all().filter(function (t) { return t.date === ui.date; }).length;
-      return '' +
+      return editBar +
         '<section class="card">' +
           '<label class="lbl" for="date">Fecha del setup</label>' +
           '<input type="date" id="date" class="input" value="' + esc(ui.date) + '" max="' + todayStr() + '">' +
-          '<p class="hint">Trades guardados en esta fecha: <b>' + count + '</b></p>' +
+          (ui.editId ? '' : '<p class="hint">Trades guardados en esta fecha: <b>' + count + '</b></p>') +
         '</section>' +
         '<section class="stack">' +
-          '<button class="btn big abs" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
-          '<button class="btn big brk" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
+          '<button class="btn big abs' + (ui.editId && d.type === 'absorcion' ? ' cur' : '') + '" data-action="type" data-v="absorcion">Entrada por absorción</button>' +
+          '<button class="btn big brk' + (ui.editId && d.type === 'ruptura' ? ' cur' : '') + '" data-action="type" data-v="ruptura">Entrada por ruptura</button>' +
         '</section>';
     }
 
-    var crumb = '<p class="crumb">' + esc(ui.date) + ' · <b>' + TYPE_LABEL[d.type] + '</b>' +
+    var crumb = editBar + '<p class="crumb">' + esc(ui.date) + ' · <b>' + TYPE_LABEL[d.type] + '</b>' +
       (ui.step >= 2 ? ' · ' + rrLabel(d.rr) : '') +
       (ui.step >= 3 ? ' · ' + d.result : '') + '</p>';
 
@@ -163,7 +167,7 @@
       '</section>' +
       '<div class="row">' +
         '<button class="btn ghost" data-action="back">Atrás</button>' +
-        '<button class="btn primary" data-action="save"' + (d.mfe === null ? ' disabled' : '') + '>Guardar</button>' +
+        '<button class="btn primary" data-action="save"' + (d.mfe === null ? ' disabled' : '') + '>' + (ui.editId ? 'Guardar cambios' : 'Guardar') + '</button>' +
       '</div>';
   }
 
@@ -367,7 +371,10 @@
           '<span class="badge ' + (t.result === 'TP' ? 'tp' : 'sl') + '">' + t.result + ' ' + fmtR(r) + '</span></div>' +
         '<div class="sub">R:R ' + rrLabel(t.rr) + ' · máx. ' + mfeLabel(t.mfe) + (ctxSummary(t) ? ' · ' + esc(ctxSummary(t)) : '') + '</div>' +
         (t.note ? '<div class="sub ctx">' + esc(t.note) + '</div>' : '') +
-        '<button class="del" aria-label="Borrar trade" data-action="del" data-id="' + esc(t.id) + '">Borrar</button>' +
+        '<div class="acts">' +
+          '<button class="edit" aria-label="Editar trade" data-action="edit" data-id="' + esc(t.id) + '">Editar</button>' +
+          '<button class="del" aria-label="Borrar trade" data-action="del" data-id="' + esc(t.id) + '">Borrar</button>' +
+        '</div>' +
       '</div>';
     }).join('') + '</section>';
     return html;
@@ -413,19 +420,40 @@
   }
 
   /* ---------- acciones ---------- */
+  // Termina la edición (guardada o cancelada) y vuelve al historial.
+  function endEdit() {
+    ui.editId = null;
+    ui.date = ui.prevDate || DB.getLastDate() || todayStr();
+    ui.prevDate = null;
+    ui.draft = newDraft();
+    ui.step = 0;
+    ui.tab = 'history';
+    render();
+  }
+
   var actions = {
     type: function (el) {
       if (!ui.date) { toast('Elegí una fecha'); return; }
-      DB.setLastDate(ui.date);
-      ui.draft = newDraft();
-      ui.draft.type = el.dataset.v;
+      if (ui.editId) {
+        ui.draft.type = el.dataset.v; // al editar se conserva el resto
+      } else {
+        DB.setLastDate(ui.date);
+        ui.draft = newDraft();
+        ui.draft.type = el.dataset.v;
+      }
       ui.step = 1;
       render();
     },
     rr: function (el) { ui.draft.rr = Number(el.dataset.v); render(); },
     next: function () { ui.step = 2; render(); },
-    back: function () { ui.step = Math.max(0, ui.step - 1); if (ui.step < 3) ui.draft.mfe = null; render(); },
-    result: function (el) { ui.draft.result = el.dataset.v; ui.draft.mfe = null; ui.step = 3; render(); },
+    back: function () { ui.step = Math.max(0, ui.step - 1); render(); },
+    result: function (el) {
+      var d = ui.draft;
+      d.result = el.dataset.v;
+      if (d.mfe !== null && !mfeAllowed(d.mfe, d.rr, d.result)) d.mfe = null;
+      ui.step = 3;
+      render();
+    },
     mfe: function (el) { ui.draft.mfe = Number(el.dataset.v); render(); },
     ctx: function (el) {
       var f = ctxField(el.dataset.k);
@@ -439,19 +467,41 @@
     save: function () {
       var d = ui.draft;
       if (d.mfe === null || !mfeAllowed(d.mfe, d.rr, d.result)) { toast('Elegí el máximo movimiento'); return; }
-      var t = DB.add({
+      var data = {
         date: ui.date, type: d.type, rr: d.rr, result: d.result, mfe: d.mfe, note: d.note,
         entry: d.entry
-      });
+      };
+      if (ui.editId) {
+        if (!DB.update(ui.editId, data)) { toast('No se pudo guardar el cambio'); return; }
+        endEdit();
+        toast('Cambios guardados ✓');
+        return;
+      }
+      var t = DB.add(data);
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
       ui.draft = newDraft();
       ui.step = 0;
       render();
       toast('Guardado ✓  ' + fmtR(S.rOf(t)));
     },
+    edit: function (el) {
+      var t = DB.all().filter(function (x) { return x.id === el.dataset.id; })[0];
+      if (!t) return;
+      if (!ui.editId) ui.prevDate = ui.date;
+      ui.editId = t.id;
+      ui.date = t.date;
+      ui.draft = { type: t.type, rr: t.rr, result: t.result, mfe: t.mfe, note: t.note || '', entry: t.entry };
+      ui.step = 3; // arranca en la pantalla más usada; con Atrás se cambia el resto
+      ui.tab = 'log';
+      render();
+    },
+    'cancel-edit': function () { endEdit(); },
     filter: function (el) { ui.filter = el.dataset.v; render(); },
     del: function (el) {
-      if (confirm('¿Borrar este trade?')) { DB.remove(el.dataset.id); render(); }
+      if (!confirm('¿Borrar este trade?')) return;
+      DB.remove(el.dataset.id);
+      if (ui.editId === el.dataset.id) { endEdit(); return; } // se borró el que se estaba editando
+      render();
     },
     'export-json': function () { saveFile('orb-backtest.json', 'application/json', DB.exportJSON()); },
     'export-csv': function () { saveFile('orb-backtest.csv', 'text/csv', toCSV()); },
