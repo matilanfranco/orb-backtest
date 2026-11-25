@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  // Subir en cada cambio publicado: se ve en Historial y sirve para confirmar que el celu se actualizó.
+  var APP_VERSION = '2026-11-25';
+
   var S = window.BTStats;
   var DB = window.BTStore;
 
@@ -20,6 +23,7 @@
   var TITLES = { log: 'Registrar', stats: 'Estadísticas', history: 'Historial' };
 
   var ui = {
+    persisted: false, // el navegador aceptó no borrar los datos
     editId: null,   // id del trade que se está editando (null = registrando uno nuevo)
     prevDate: null, // fecha de registro a restaurar al terminar de editar
     tab: 'log',
@@ -72,6 +76,19 @@
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
   }
 
+  /* ---------- backup ---------- */
+  function backupLine(b) {
+    if (!b.lastBackup) return 'Nunca exportaste un backup.';
+    return 'Último backup: ' + (b.days === 0 ? 'hoy' : (b.days === 1 ? 'ayer' : 'hace ' + b.days + ' días')) +
+      (b.newTrades ? ' · ' + b.newTrades + ' trade' + (b.newTrades === 1 ? '' : 's') + ' nuevo' + (b.newTrades === 1 ? '' : 's') + ' desde entonces' : '') + '.';
+  }
+  function backupBanner() {
+    var b = DB.backupStatus();
+    if (!b.due) return '';
+    return '<div class="warn backup"><span>' + backupLine(b) + ' Guardá una copia por si se borra el teléfono.</span>' +
+      '<button class="chip" data-action="export-json">Hacer backup</button></div>';
+  }
+
   /* ---------- registrar ---------- */
   function viewLog() {
     var d = ui.draft;
@@ -79,7 +96,7 @@
       '<button class="chip" data-action="cancel-edit">Cancelar</button></div>' : '';
     if (ui.step === 0) {
       var count = DB.all().filter(function (t) { return t.date === ui.date; }).length;
-      return editBar +
+      return editBar + (ui.editId ? '' : backupBanner()) +
         '<section class="card">' +
           '<label class="lbl" for="date">Fecha del setup</label>' +
           '<input type="date" id="date" class="input" value="' + esc(ui.date) + '" max="' + todayStr() + '">' +
@@ -334,8 +351,9 @@
   function viewHistory() {
     var all = DB.all();
     var list = S.sortTrades(all).reverse();
-    var html = '<section class="card"><h3>Datos</h3>' +
-      '<p class="hint">Todo se guarda solo en este dispositivo. Exportá una copia de vez en cuando.</p>' +
+    var html = backupBanner() + '<section class="card"><h3>Datos</h3>' +
+      '<p class="hint">Todo se guarda solo en este dispositivo, también sin internet. ' + backupLine(DB.backupStatus()) +
+      (ui.persisted ? ' Almacenamiento protegido ✓' : '') + '</p>' +
       '<div class="chips tight">' +
         '<button class="chip" data-action="export-json">Exportar JSON</button>' +
         '<button class="chip" data-action="export-csv">Exportar CSV</button>' +
@@ -343,6 +361,7 @@
         '<button class="chip danger" data-action="clear">Borrar todo</button>' +
       '</div>' +
       '<input type="file" id="importFile" accept="application/json,.json" hidden>' +
+      '<p class="hint ver">Versión de la app: ' + APP_VERSION + '</p>' +
     '</section>';
 
     if (!list.length) return html + '<section class="card empty"><p>No hay trades guardados.</p></section>';
@@ -376,21 +395,23 @@
   }
 
   /* ---------- archivos ---------- */
+  // Devuelve true si el archivo se compartió/descargó, false si el usuario canceló.
   async function saveFile(name, mime, text) {
     var file = new File([text], name, { type: mime });
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: name });
-        return;
+        return true;
       }
     } catch (e) {
-      if (e && e.name === 'AbortError') return;
+      if (e && e.name === 'AbortError') return false;
     }
     var url = URL.createObjectURL(file);
     var a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    return true;
   }
 
   function csvCell(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
@@ -461,6 +482,7 @@
       }
       var t = DB.add(data);
       if (!t) { toast('No se pudo guardar (¿almacenamiento lleno?)'); return; }
+      askPersistence();
       ui.draft = newDraft();
       ui.step = 0;
       render();
@@ -485,7 +507,15 @@
       if (ui.editId === el.dataset.id) { endEdit(); return; } // se borró el que se estaba editando
       render();
     },
-    'export-json': function () { saveFile('orb-backtest.json', 'application/json', DB.exportJSON()); },
+    'export-json': function () {
+      var day = todayStr();
+      saveFile('orb-backtest-' + day + '.json', 'application/json', DB.exportJSON()).then(function (ok) {
+        if (!ok) return;
+        DB.markBackup();
+        render();
+        toast('Backup listo ✓');
+      });
+    },
     'export-csv': function () { saveFile('orb-backtest.csv', 'text/csv', toCSV()); },
     import: function () { var f = document.getElementById('importFile'); if (f) f.click(); },
     clear: function () {
@@ -527,12 +557,34 @@
     b.addEventListener('click', function () { ui.tab = b.dataset.tab; render(); });
   });
 
+  // Pide almacenamiento persistente (el navegador puede decidir no darlo; se reintenta al guardar).
+  function askPersistence() {
+    if (ui.persisted) return;
+    DB.requestPersistence().then(function (ok) {
+      if (ok && !ui.persisted) { ui.persisted = true; if (ui.tab === 'history') render(); }
+    });
+  }
+
   render();
+  askPersistence();
 
   // Offline: el service worker solo funciona en https o localhost.
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    var hadController = !!navigator.serviceWorker.controller;
+    var reloaded = false;
+    // Cuando se instala una versión nueva, recarga sola (salvo que estés a mitad de un registro).
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloaded) return;
+      if (ui.step === 0 && !ui.editId) { reloaded = true; location.reload(); }
+      else toast('Hay una versión nueva: se aplica al volver a abrir la app');
+    });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* sin offline, pero la app sigue andando */ });
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        // Al volver a la app (desde otra app o la pantalla de inicio), busca actualizaciones.
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') reg.update().catch(function () { /* sin red */ });
+        });
+      }).catch(function () { /* sin offline, pero la app sigue andando */ });
     });
   }
 })();

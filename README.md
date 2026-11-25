@@ -49,10 +49,14 @@ Después, en el celu:
 
 ## Tus datos
 
-- Se guardan en el `localStorage` del navegador, en tu dispositivo. No hay servidor ni cuenta.
-- El `localStorage` se puede perder si borrás los datos del sitio o desinstalás la app. En iPhone, Safari puede limpiar el almacenamiento de sitios que no se usan por varios días; instalada en la pantalla de inicio es mucho más estable.
-- **Editar un trade:** Historial → *Editar*. Abre en la pantalla del máximo movimiento / punto de entrada / descripción; con *Atrás* podés cambiar también resultado, R:R, tipo y fecha. *Cancelar* descarta los cambios.
-- **Hacé backup de vez en cuando:** Historial → *Exportar JSON* (o CSV). *Importar JSON* mezcla sin duplicar.
+- Se guardan en el `localStorage` del navegador, en tu dispositivo, en el momento en que tocás Guardar. No hay servidor ni cuenta. Funciona igual sin internet y sobrevive a cerrar la app.
+- La app le pide al navegador **almacenamiento persistente** para que no borre los datos aunque falte espacio (en Historial dice "Almacenamiento protegido ✓" si lo aceptó).
+- Lo que sí borra el historial: desinstalar la app, borrar los datos del sitio en el navegador, o usar navegación privada. En iPhone, Safari y la app instalada en la pantalla de inicio **no comparten datos**: usá siempre el ícono.
+- **Backup:** Historial → *Exportar JSON* (o el botón *Hacer backup* del aviso). La app te avisa si nunca exportaste y tenés 5+ trades, o si pasaron 7+ días / 20+ trades nuevos desde el último backup. *Importar JSON* mezcla sin duplicar.
+
+## Actualizaciones
+
+Con internet, la app siempre carga la última versión publicada; sin internet, usa la que tiene guardada. La versión instalada se ve al pie de la tarjeta *Datos* en Historial. Si no ves un cambio: abrila con internet, esperá unos segundos, cerrala del todo (deslizándola en el selector de apps) y volvé a abrirla.
 
 ## Estructura
 

@@ -49,8 +49,19 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  // ¿Toca recordar el backup? Solo si hay trades nuevos desde el último export y:
+  // nunca se exportó y ya hay 5 o más, pasaron 7 días o más, o se cargaron 20 o más.
+  var DAY = 24 * 60 * 60 * 1000;
+  function backupStatus(trades, lastBackup, now) {
+    var since = lastBackup || 0;
+    var newTrades = trades.filter(function (t) { return t.createdAt > since; }).length;
+    var days = lastBackup ? Math.floor((now - lastBackup) / DAY) : null;
+    var due = newTrades > 0 && (lastBackup ? (days >= 7 || newTrades >= 20) : newTrades >= 5);
+    return { due: due, newTrades: newTrades, days: days, lastBackup: lastBackup || null };
+  }
+
   function serialize(s) {
-    return JSON.stringify({ version: VERSION, trades: s.trades, lastDate: s.lastDate });
+    return JSON.stringify({ version: VERSION, trades: s.trades, lastDate: s.lastDate, lastBackup: s.lastBackup });
   }
 
   var state = load();
@@ -60,10 +71,13 @@
     try {
       raw = localStorage.getItem(KEY);
       for (var i = 0; !raw && i < OLD_KEYS.length; i++) { src = OLD_KEYS[i]; raw = localStorage.getItem(src); }
-      if (!raw) return { trades: [], lastDate: null };
+      if (!raw) return { trades: [], lastDate: null, lastBackup: null };
       var d = JSON.parse(raw);
       if (!d || !Array.isArray(d.trades)) throw new Error('formato');
-      var s = { trades: d.trades.map(normalize).filter(valid), lastDate: d.lastDate || null };
+      var s = {
+        trades: d.trades.map(normalize).filter(valid), lastDate: d.lastDate || null,
+        lastBackup: typeof d.lastBackup === 'number' ? d.lastBackup : null
+      };
       if (src !== KEY) {
         try { localStorage.setItem(KEY, serialize(s)); } catch (e) { /* se reintenta en el próximo guardado */ }
       }
@@ -71,7 +85,7 @@
     } catch (e) {
       // Si algo está corrupto, guardamos copia antes de que se pise.
       try { if (raw) localStorage.setItem(src + ':corrupt', raw); } catch (e2) { /* nada */ }
-      return { trades: [], lastDate: null };
+      return { trades: [], lastDate: null, lastBackup: null };
     }
   }
 
@@ -89,6 +103,18 @@
     all: function () { return state.trades.slice(); },
     getLastDate: function () { return state.lastDate; },
     setLastDate: function (d) { state.lastDate = d; return persist(); },
+    backupStatus: function (now) { return backupStatus(state.trades, state.lastBackup, now || Date.now()); },
+    markBackup: function (now) { state.lastBackup = now || Date.now(); return persist(); },
+    // Pide al navegador que no borre estos datos aunque le falte espacio. Devuelve una promesa con true/false.
+    requestPersistence: function () {
+      try {
+        if (navigator.storage && navigator.storage.persist) {
+          return navigator.storage.persisted().then(function (p) { return p || navigator.storage.persist(); })
+            .catch(function () { return false; });
+        }
+      } catch (e) { /* navegador sin soporte */ }
+      return Promise.resolve(false);
+    },
     add: function (t) {
       var trade = normalize({
         id: uid(), date: t.date, type: t.type, rr: t.rr, result: t.result,
@@ -139,5 +165,6 @@
     }
   };
 
+  api.backupStatusOf = backupStatus; // versión pura, para tests
   root.BTStore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

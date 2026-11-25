@@ -10,7 +10,9 @@ La pregunta que quiere responder con los datos: **¿qué objetivo conviene (1:1,
 
 ## Reglas del proyecto
 - **Sin build ni dependencias**: HTML/CSS/JS puro con `<script>` clásicos (no módulos ES, para que también abra desde `file://`).
-- **Offline primero**: todo en `localStorage` (clave `orb-bt:v3`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js`.
+- **Offline primero**: todo en `localStorage` (clave `orb-bt:v3`) + service worker (`sw.js`). Si agregás archivos nuevos que la app necesite, sumalos a `ASSETS` en `sw.js` y subí el número de `CACHE`.
+- **Publicada en GitHub Pages**: https://matilanfranco.github.io/orb-backtest/ (rama `main`, raíz). El SW es *network-first* con timeout de 4 s y `cache: 'no-cache'`: con internet trae siempre lo último; sin internet usa la caché.
+- **En cada cambio publicado, actualizar `APP_VERSION` en `js/app.js`** (fecha). Se ve en Historial y es la forma de confirmar que el celu tomó la versión nueva.
 - UI en **español**, pensada para celu (botones grandes, una mano). Mantener simple el flujo de registro: pocas pantallas, pocos toques.
 - La lógica de estadísticas vive en `js/stats.js` como funciones puras y se prueba con `npm test` (node:test). La migración/importación de `js/store.js` se prueba en `tests/store.test.js` con un localStorage falso. Cualquier cambio de cálculo lleva su test.
 - Los datos del usuario no se pueden romper: si cambia el formato guardado, subir la versión de la clave y migrar; mantener Exportar/Importar JSON.

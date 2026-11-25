@@ -105,3 +105,33 @@ test('update rechaza datos inválidos y no toca el trade', () => {
   assert.strictEqual(DB.update('no-existe', { date: '2026-03-01', type: 'absorcion', rr: 1, result: 'SL', mfe: 0 }), null);
   assert.deepStrictEqual(DB.all()[0], a);
 });
+
+test('backupStatus: cuándo recordar el backup', () => {
+  const { DB } = loadStore({});
+  const f = DB.backupStatusOf;
+  const DAY = 86400000;
+  const now = 100 * DAY;
+  const tr = (n, at) => Array.from({ length: n }, (_, i) => ({ createdAt: at + i }));
+  assert.strictEqual(f([], null, now).due, false);                       // sin trades
+  assert.strictEqual(f(tr(4, 1), null, now).due, false);                 // nunca exportó, pocos trades
+  assert.strictEqual(f(tr(5, 1), null, now).due, true);                  // nunca exportó, 5 trades
+  const last = now - 3 * DAY;
+  assert.strictEqual(f(tr(3, last + 1), last, now).due, false);          // 3 días y 3 nuevos
+  assert.strictEqual(f(tr(20, last + 1), last, now).due, true);          // 20 nuevos
+  const old = now - 8 * DAY;
+  assert.strictEqual(f(tr(1, old + 1), old, now).due, true);             // 8 días y hay nuevos
+  const s = f(tr(10, 1), old, now);                                      // 8 días pero nada nuevo
+  assert.strictEqual(s.due, false);
+  assert.strictEqual(s.days, 8);
+  assert.strictEqual(s.newTrades, 0);
+});
+
+test('markBackup se guarda y sobrevive a reabrir la app', () => {
+  const { DB, data } = loadStore({});
+  for (let i = 0; i < 5; i++) DB.add({ date: '2026-02-01', type: 'ruptura', rr: 1, result: 'TP', mfe: 1 });
+  assert.strictEqual(DB.backupStatus().due, true);
+  DB.markBackup(Date.now() + 1);
+  const reopened = loadStore(data).DB;
+  assert.strictEqual(reopened.backupStatus().due, false);
+  assert.strictEqual(reopened.all().length, 5);
+});
